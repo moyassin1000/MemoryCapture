@@ -1,5 +1,6 @@
 package com.memorycapture.app.recording
 
+import android.os.SystemClock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,5 +33,18 @@ object SavedRecordingStore {
 
     fun clear() {
         mutableRecording.value = null
+    }
+}
+
+object RecordingSessionStore {
+    private val mutableStartedAt = MutableStateFlow<Long?>(null)
+    val startedAtElapsedRealtime: StateFlow<Long?> = mutableStartedAt.asStateFlow()
+
+    fun markStarted() {
+        mutableStartedAt.value = SystemClock.elapsedRealtime()
+    }
+
+    fun clear() {
+        mutableStartedAt.value = null
     }
 }
