@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import androidx.documentfile.provider.DocumentFile
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -31,12 +32,16 @@ class ScreenRecorderEngine(
     private var outputHandle: OutputHandle? = null
     private var started = false
 
-    fun start(projection: MediaProjection) {
+    fun start(
+        projection: MediaProjection,
+        customTreeUri: String? = null,
+        customStorageLabel: String? = null,
+    ) {
         check(!started) { "A recording session is already active." }
 
         val metrics = context.resources.displayMetrics
         val (width, height) = scaledEvenSize(metrics.widthPixels, metrics.heightPixels)
-        val output = createOutput()
+        val output = createOutput(customTreeUri, customStorageLabel)
 
         try {
             val mediaRecorder = createMediaRecorder().apply {
@@ -146,10 +151,35 @@ class ScreenRecorderEngine(
             MediaRecorder()
         }
 
-    private fun createOutput(): OutputHandle {
+    private fun createOutput(
+        customTreeUri: String?,
+        customStorageLabel: String?,
+    ): OutputHandle {
         val displayName = "MemoryCapture_${
             SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         }.mp4"
+
+        if (!customTreeUri.isNullOrBlank()) {
+            val treeUri = Uri.parse(customTreeUri)
+            val tree = requireNotNull(DocumentFile.fromTreeUri(context, treeUri)) {
+                "Unable to access selected storage folder."
+            }
+            val document = requireNotNull(tree.createFile("video/mp4", displayName)) {
+                "Unable to create video in selected folder."
+            }
+            val pfd = requireNotNull(
+                context.contentResolver.openFileDescriptor(document.uri, "w"),
+            ) { "Unable to open selected folder output file." }
+
+            return OutputHandle(
+                displayName = displayName,
+                uri = document.uri,
+                fileDescriptor = pfd,
+                absolutePath = null,
+                locationLabel = customStorageLabel?.takeIf { it.isNotBlank() } ?: "Selected folder",
+                pendingMediaStoreItem = false,
+            )
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
@@ -179,6 +209,7 @@ class ScreenRecorderEngine(
                 fileDescriptor = pfd,
                 absolutePath = null,
                 locationLabel = "${Environment.DIRECTORY_MOVIES}/MemoryCapture",
+                pendingMediaStoreItem = true,
             )
         }
 
@@ -193,11 +224,12 @@ class ScreenRecorderEngine(
             fileDescriptor = null,
             absolutePath = file.absolutePath,
             locationLabel = file.parentFile?.absolutePath ?: file.absolutePath,
+            pendingMediaStoreItem = false,
         )
     }
 
     private fun finalizeOutput(output: OutputHandle) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && output.uri != null) {
+        if (output.pendingMediaStoreItem && output.uri != null) {
             val values = ContentValues().apply {
                 put(MediaStore.Video.Media.IS_PENDING, 0)
             }
@@ -247,6 +279,7 @@ class ScreenRecorderEngine(
         val fileDescriptor: ParcelFileDescriptor?,
         val absolutePath: String?,
         val locationLabel: String,
+        val pendingMediaStoreItem: Boolean,
     )
 
     companion object {
