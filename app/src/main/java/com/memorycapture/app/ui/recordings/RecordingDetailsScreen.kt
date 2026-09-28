@@ -6,8 +6,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.VideoFile
@@ -18,6 +19,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,6 +59,8 @@ fun RecordingDetailsScreen(
     val scope = rememberCoroutineScope()
     var item by remember { mutableStateOf<RecordingItem?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var showRename by remember { mutableStateOf(false) }
+    var renameText by remember { mutableStateOf("") }
 
     LaunchedEffect(uriString, customTreeUri) {
         item = repository.loadRecordings(customTreeUri).firstOrNull { it.uri == uriString }
@@ -76,10 +80,47 @@ fun RecordingDetailsScreen(
                             onBack()
                         }
                     },
-                ) { Text(stringResource(R.string.delete)) }
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
             },
             dismissButton = {
                 TextButton(onClick = { confirmDelete = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    if (showRename) {
+        AlertDialog(
+            onDismissRequest = { showRename = false },
+            title = { Text(stringResource(R.string.rename_recording)) },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.file_name)) },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = renameText.isNotBlank(),
+                    onClick = {
+                        showRename = false
+                        scope.launch {
+                            repository.rename(uriString, renameText.trim())
+                            item = repository.loadRecordings(customTreeUri)
+                                .firstOrNull { it.uri == uriString }
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.rename))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRename = false }) {
                     Text(stringResource(R.string.cancel))
                 }
             },
@@ -92,7 +133,10 @@ fun RecordingDetailsScreen(
                 title = { Text(stringResource(R.string.recording_details)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.back),
+                        )
                     }
                 },
             )
@@ -169,6 +213,20 @@ fun RecordingDetailsScreen(
                     Icon(Icons.Default.Share, contentDescription = null)
                     Text(
                         stringResource(R.string.share),
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        renameText = recording.displayName.removeSuffix(".mp4")
+                        showRename = true
+                    },
+                ) {
+                    Icon(Icons.Default.DriveFileRenameOutline, contentDescription = null)
+                    Text(
+                        stringResource(R.string.rename),
                         modifier = Modifier.padding(start = 8.dp),
                     )
                 }
