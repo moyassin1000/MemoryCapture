@@ -95,6 +95,7 @@ private enum class RecordingSort {
 @Composable
 fun RecordingsScreen(
     onOpenDetails: (String) -> Unit,
+    onPlayRecording: (String) -> Unit,
     onGoToCapture: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -299,7 +300,7 @@ fun RecordingsScreen(
                                     }
                                 },
                                 onOpen = { onOpenDetails(item.uri) },
-                                onPlay = { openVideo(context, item.uri) },
+                                onPlay = { onPlayRecording(item.uri) },
                             )
                         }
                     }
@@ -320,7 +321,7 @@ fun RecordingsScreen(
                                         preferences.toggleFavoriteRecording(item.uri)
                                     }
                                 },
-                                onPlay = { openVideo(context, item.uri) },
+                                onPlay = { onPlayRecording(item.uri) },
                                 onShare = { shareVideo(context, item.uri) },
                                 onRename = {
                                     renameText = item.displayName.removeSuffix(".mp4")
