@@ -26,6 +26,13 @@ enum class ProAccent {
     Sunset,
 }
 
+enum class AudioMode {
+    None,
+    Microphone,
+    DeviceAudio,
+    DeviceAndMic,
+}
+
 class AppPreferences(
     private val context: Context,
 ) {
@@ -69,6 +76,16 @@ class AppPreferences(
         }.getOrDefault(ProAccent.Electric)
     }
 
+    val audioMode: Flow<AudioMode> = context.memoryCaptureDataStore.data.map { preferences ->
+        runCatching {
+            AudioMode.valueOf(preferences[KEY_AUDIO_MODE] ?: AudioMode.DeviceAndMic.name)
+        }.getOrDefault(AudioMode.DeviceAndMic)
+    }
+
+    val microphoneDeviceId: Flow<Int> = context.memoryCaptureDataStore.data.map {
+        it[KEY_MICROPHONE_DEVICE_ID] ?: -1
+    }
+
     suspend fun setThemeMode(mode: ThemeMode) {
         context.memoryCaptureDataStore.edit { it[KEY_THEME] = mode.name }
     }
@@ -109,6 +126,14 @@ class AppPreferences(
         context.memoryCaptureDataStore.edit { it[KEY_PRO_ACCENT] = accent.name }
     }
 
+    suspend fun setAudioMode(mode: AudioMode) {
+        context.memoryCaptureDataStore.edit { it[KEY_AUDIO_MODE] = mode.name }
+    }
+
+    suspend fun setMicrophoneDeviceId(deviceId: Int) {
+        context.memoryCaptureDataStore.edit { it[KEY_MICROPHONE_DEVICE_ID] = deviceId }
+    }
+
     suspend fun toggleFavoriteRecording(uri: String) {
         context.memoryCaptureDataStore.edit { preferences ->
             val current = preferences[KEY_FAVORITE_RECORDINGS] ?: emptySet()
@@ -136,5 +161,7 @@ class AppPreferences(
         private val KEY_FAVORITE_RECORDINGS = stringSetPreferencesKey("favorite_recordings")
         private val KEY_PRO_ENTITLEMENT = booleanPreferencesKey("pro_entitlement_cached")
         private val KEY_PRO_ACCENT = stringPreferencesKey("pro_accent")
+        private val KEY_AUDIO_MODE = stringPreferencesKey("audio_mode")
+        private val KEY_MICROPHONE_DEVICE_ID = intPreferencesKey("microphone_device_id")
     }
 }

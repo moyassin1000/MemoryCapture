@@ -212,4 +212,27 @@
     <string name="pro_showcase_title">مصمم للمستخدمين المتقدمين</string>
     <string name="pro_showcase_body">افتح هوية بصرية أقوى وثيمات Premium وإحصاءات متقدمة ووصول دائم.</string>
 
+
+    <string name="audio_studio">استوديو الصوت</string>
+    <string name="audio_studio_body">اختر بدقة الصوت الذي تريد تسجيله مع الشاشة.</string>
+    <string name="audio_mode_off">فيديو فقط</string>
+    <string name="audio_mode_mic">الميكروفون</string>
+    <string name="audio_mode_device">صوت الجهاز</string>
+    <string name="audio_mode_both">صوت الجهاز + الميكروفون</string>
+    <string name="audio_mode_off_body">تسجيل الشاشة بدون مسار صوتي.</string>
+    <string name="audio_mode_mic_body">تسجيل مدخل الميكروفون الفعلي سواء الهاتف أو السلكي أو USB أو Bluetooth عندما يختاره أندرويد.</string>
+    <string name="audio_mode_device_body">التقاط صوت اللعبة أو التطبيق المؤهل مباشرة قبل خروجه إلى السبيكر أو السماعة أو Bluetooth.</string>
+    <string name="audio_mode_both_body">دمج صوت الجهاز المؤهل مع الميكروفون في مسار AAC واحد.</string>
+    <string name="audio_android10_required">صوت الجهاز يحتاج Android 10 أو أحدث.</string>
+    <string name="audio_capture_limit_note">بعض التطبيقات تحمي صوتها ولا يسمح أندرويد بالتقاطه. صوت المكالمات والمحتوى المحمي DRM غير مضمون.</string>
+    <string name="audio_route_auto">مصدر الإدخال: تلقائي</string>
+    <string name="audio_ready">AAC • 48 كيلوهرتز • متزامن مع الفيديو</string>
+    <string name="audio_permission_denied">لم يتم منح إذن الميكروفون/الصوت.</string>
+
+
+    <string name="microphone_source">مصدر الميكروفون</string>
+    <string name="microphone_source_auto">اختيار تلقائي</string>
+    <string name="microphone_connected_inputs">مداخل الصوت المتصلة</string>
+    <string name="microphone_device_selected">مدخل مفضّل</string>
+
 </resources>

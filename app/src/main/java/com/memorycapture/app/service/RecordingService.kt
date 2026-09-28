@@ -11,6 +11,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.memorycapture.app.MainActivity
+import com.memorycapture.app.data.preferences.AudioMode
 import com.memorycapture.app.R
 import com.memorycapture.app.projection.MediaProjectionController
 import com.memorycapture.app.recording.RecordingError
@@ -56,7 +57,13 @@ class RecordingService : Service() {
             return
         }
 
-        startAsForeground()
+        val audioMode = runCatching {
+            AudioMode.valueOf(
+                intent.getStringExtra(EXTRA_AUDIO_MODE) ?: AudioMode.None.name,
+            )
+        }.getOrDefault(AudioMode.None)
+
+        startAsForeground(audioMode)
         intentionalStop = false
 
         runCatching {
@@ -67,16 +74,29 @@ class RecordingService : Service() {
                 projection = projection,
                 customTreeUri = intent.getStringExtra(EXTRA_STORAGE_TREE_URI),
                 customStorageLabel = intent.getStringExtra(EXTRA_STORAGE_LABEL),
+                audioMode = audioMode,
+                preferredMicDeviceId = intent.getIntExtra(
+                    EXTRA_MICROPHONE_DEVICE_ID,
+                    -1,
+                ),
             )
         }.onSuccess {
             RecordingSessionStore.markStarted()
             RecordingStateStore.transition(RecordingState.Recording)
-        }.onFailure {
+        }.onFailure { error ->
             recorderEngine.abort()
             RecordingSessionStore.clear()
             intentionalStop = true
             projectionController.stop()
-            RecordingStateStore.forceError(RecordingError.EncoderUnavailable)
+
+            val reason = when {
+                error is SecurityException -> RecordingError.MicrophoneDenied
+                error.message?.contains("audio", ignoreCase = true) == true ->
+                    RecordingError.AudioCaptureUnsupported
+                else -> RecordingError.EncoderUnavailable
+            }
+
+            RecordingStateStore.forceError(reason)
             stopForegroundAndSelf()
         }
     }
@@ -132,7 +152,7 @@ class RecordingService : Service() {
         )
     }
 
-    private fun startAsForeground() {
+    private fun startAsForeground(audioMode: AudioMode) {
         val openApp = PendingIntent.getActivity(
             this,
             0,
@@ -155,11 +175,22 @@ class RecordingService : Service() {
             .addAction(0, getString(R.string.notification_stop), stopIntent)
             .build()
 
+        val serviceType =
+            if (
+                audioMode == AudioMode.Microphone ||
+                audioMode == AudioMode.DeviceAndMic
+            ) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            } else {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            }
+
         ServiceCompat.startForeground(
             this,
             NOTIFICATION_ID,
             notification,
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION,
+            serviceType,
         )
     }
 
@@ -201,6 +232,8 @@ class RecordingService : Service() {
         const val EXTRA_RESULT_DATA = "result_data"
         const val EXTRA_STORAGE_TREE_URI = "storage_tree_uri"
         const val EXTRA_STORAGE_LABEL = "storage_label"
+        const val EXTRA_AUDIO_MODE = "audio_mode"
+        const val EXTRA_MICROPHONE_DEVICE_ID = "microphone_device_id"
         private const val CHANNEL_ID = "recording"
         private const val NOTIFICATION_ID = 1001
     }
