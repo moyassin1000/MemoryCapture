@@ -229,4 +229,10 @@
     <string name="audio_ready">AAC • 48 kHz • synced with video</string>
     <string name="audio_permission_denied">Microphone/audio permission was not granted.</string>
 
+
+    <string name="microphone_source">Microphone source</string>
+    <string name="microphone_source_auto">Automatic routing</string>
+    <string name="microphone_connected_inputs">Connected inputs</string>
+    <string name="microphone_device_selected">Preferred input</string>
+
 </resources>
