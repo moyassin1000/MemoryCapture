@@ -24,10 +24,12 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.VideoCameraBack
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -49,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.memorycapture.app.R
+import com.memorycapture.app.billing.ProBillingManager
 import com.memorycapture.app.data.preferences.AppPreferences
 import com.memorycapture.app.data.recordings.RecordingRepository
 import com.memorycapture.app.recording.CountdownStore
@@ -71,6 +74,7 @@ fun HomeScreen(
     onOpenCapture: () -> Unit,
     onOpenRecordings: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenPro: () -> Unit,
 ) {
     val context = LocalContext.current
     val repository = remember { RecordingRepository(context.applicationContext) }
@@ -79,6 +83,7 @@ fun HomeScreen(
     val storageLabel by preferences.storageLabel.collectAsStateWithLifecycle(initialValue = null)
 
     val state by RecordingStateStore.state.collectAsStateWithLifecycle()
+    val proState by ProBillingManager.state.collectAsStateWithLifecycle()
     val countdown by CountdownStore.seconds.collectAsStateWithLifecycle()
     val savedRecording by SavedRecordingStore.recording.collectAsStateWithLifecycle()
     val startedAt by RecordingSessionStore.startedAtElapsedRealtime.collectAsStateWithLifecycle()
@@ -131,6 +136,19 @@ fun HomeScreen(
                                 text = stringResource(R.string.home_tagline),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = onOpenPro) {
+                            Icon(
+                                imageVector = Icons.Default.WorkspacePremium,
+                                contentDescription = stringResource(R.string.pro_title),
+                                tint = if (proState.isPro) {
+                                    MaterialTheme.colorScheme.tertiary
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
                             )
                         }
                     },
@@ -218,6 +236,61 @@ fun HomeScreen(
                             stopText = stringResource(R.string.stop_recording),
                             onClick = if (active) onStopRecording else onStartRecording,
                         )
+                    }
+
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .shadow(12.dp, MaterialTheme.shapes.large)
+                                .clickable(onClick = onOpenPro),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (proState.isPro) {
+                                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.18f)
+                                } else {
+                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+                                },
+                            ),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(18.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.WorkspacePremium,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                )
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        text = if (proState.isPro) {
+                                            stringResource(R.string.pro_active)
+                                        } else {
+                                            stringResource(R.string.upgrade_to_pro)
+                                        },
+                                        fontWeight = FontWeight.Black,
+                                    )
+                                    Text(
+                                        text = if (proState.isPro) {
+                                            stringResource(R.string.pro_active_body)
+                                        } else {
+                                            stringResource(R.string.upgrade_to_pro_body)
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(
+                                    text = stringResource(R.string.pro_badge),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Black,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                )
+                            }
+                        }
                     }
 
                     item {
