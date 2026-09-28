@@ -75,6 +75,7 @@ import java.util.Date
 fun RecordingDetailsScreen(
     uriString: String,
     onBack: () -> Unit,
+    onPlay: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val repository = remember { RecordingRepository(context.applicationContext) }
@@ -236,7 +237,7 @@ fun RecordingDetailsScreen(
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         IconButton(
-                                            onClick = { openVideo(context, recording.uri) },
+                                            onClick = { onPlay(recording.uri) },
                                         ) {
                                             Icon(
                                                 Icons.Default.PlayArrow,
@@ -324,7 +325,7 @@ fun RecordingDetailsScreen(
 
                     Button(
                         modifier = Modifier.fillMaxWidth(),
-                        onClick = { openVideo(context, recording.uri) },
+                        onClick = { onPlay(recording.uri) },
                     ) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null)
                         Text(
