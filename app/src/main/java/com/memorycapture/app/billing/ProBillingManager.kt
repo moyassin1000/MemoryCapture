@@ -143,9 +143,17 @@ object ProBillingManager : PurchasesUpdatedListener {
             return
         }
 
+        val offerToken = offer.offerToken
+        if (offerToken.isNullOrBlank()) {
+            mutableState.value = mutableState.value.copy(
+                message = "No valid Google Play offer token is available for Pro.",
+            )
+            return
+        }
+
         val productParams = BillingFlowParams.ProductDetailsParams.newBuilder()
             .setProductDetails(details)
-            .setOfferToken(offer.offerToken)
+            .setOfferToken(offerToken)
             .build()
 
         val result = client.launchBillingFlow(
