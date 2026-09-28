@@ -44,6 +44,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +55,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -69,6 +72,7 @@ import com.memorycapture.app.data.preferences.ThemeMode
 import com.memorycapture.app.data.recordings.RecordingRepository
 import com.memorycapture.app.recording.RecordingState
 import com.memorycapture.app.recording.RecordingStateStore
+import com.memorycapture.app.ui.components.PremiumBackground
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -220,19 +224,25 @@ fun SettingsScreen(
     val statFs = remember { StatFs(Environment.getDataDirectory().absolutePath) }
     val availableStorage = remember { formatStorage(statFs.availableBytes) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        stringResource(R.string.settings_title),
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
+    PremiumBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                    ),
+                    title = {
+                        Text(
+                            stringResource(R.string.settings_title),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Black,
+                        )
+                    },
+                )
+            },
+        ) { padding ->
+            LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
@@ -457,6 +467,7 @@ fun SettingsScreen(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -484,6 +495,7 @@ private fun SettingsRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .shadow(7.dp, MaterialTheme.shapes.medium)
             .then(
                 if (onClick != null && enabled) {
                     Modifier.clickable(onClick = onClick)
@@ -532,7 +544,11 @@ private fun SettingsToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(7.dp, MaterialTheme.shapes.medium),
+    ) {
         Row(
             modifier = Modifier.padding(17.dp),
             verticalAlignment = Alignment.CenterVertically,
