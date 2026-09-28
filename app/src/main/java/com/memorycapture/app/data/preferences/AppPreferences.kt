@@ -53,6 +53,10 @@ class AppPreferences(
         it[KEY_FAVORITE_RECORDINGS] ?: emptySet()
     }
 
+    val proEntitlementCached: Flow<Boolean> = context.memoryCaptureDataStore.data.map {
+        it[KEY_PRO_ENTITLEMENT] ?: false
+    }
+
     suspend fun setThemeMode(mode: ThemeMode) {
         context.memoryCaptureDataStore.edit { it[KEY_THEME] = mode.name }
     }
@@ -85,6 +89,10 @@ class AppPreferences(
         }
     }
 
+    suspend fun setProEntitlementCached(enabled: Boolean) {
+        context.memoryCaptureDataStore.edit { it[KEY_PRO_ENTITLEMENT] = enabled }
+    }
+
     suspend fun toggleFavoriteRecording(uri: String) {
         context.memoryCaptureDataStore.edit { preferences ->
             val current = preferences[KEY_FAVORITE_RECORDINGS] ?: emptySet()
@@ -110,5 +118,6 @@ class AppPreferences(
         private val KEY_STORAGE_LABEL = stringPreferencesKey("storage_label")
         private val KEY_UPDATE_NOTIFICATIONS = booleanPreferencesKey("update_notifications")
         private val KEY_FAVORITE_RECORDINGS = stringSetPreferencesKey("favorite_recordings")
+        private val KEY_PRO_ENTITLEMENT = booleanPreferencesKey("pro_entitlement_cached")
     }
 }
