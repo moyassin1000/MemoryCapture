@@ -154,4 +154,35 @@
     <string name="storage_overview">ملخص التخزين</string>
     <string name="capture_ready_message">كل شيء جاهز لبدء تسجيل الشاشة التالي.</string>
 
+
+    <string name="pro_title">MemoryCapture Pro</string>
+    <string name="unlock_pro">افتح MemoryCapture Pro</string>
+    <string name="pro_intro">ترقية دائمة مرة واحدة لثيمات احترافية وإحصاءات متقدمة وتجربة Premium أقوى.</string>
+    <string name="pro_active">MemoryCapture Pro مفعّل</string>
+    <string name="pro_active_body">تم فتح مزايا Pro الدائمة على حساب Google Play الحالي.</string>
+    <string name="pro_lifetime_owned">نسخة Pro دائمة مملوكة</string>
+    <string name="pro_features">المزايا التي ستحصل عليها</string>
+    <string name="pro_feature_themes">ثيمات Premium</string>
+    <string name="pro_feature_themes_body">اختر بين Electric وAurora وSunset بهويات بصرية احترافية.</string>
+    <string name="pro_feature_insights">إحصاءات متقدمة للمكتبة</string>
+    <string name="pro_feature_insights_body">اعرض إجمالي وقت التسجيل والمساحة المستخدمة وأعلى دقة تسجيل.</string>
+    <string name="pro_feature_experience">تجربة Premium</string>
+    <string name="pro_feature_experience_body">افتح الهوية البصرية الكاملة والتخصيصات الحصرية لنسخة Pro.</string>
+    <string name="pro_feature_lifetime">فتح دائم</string>
+    <string name="pro_feature_lifetime_body">شراء مرة واحدة عبر Google Play مع إمكانية استعادة الشراء على الأجهزة المدعومة بنفس الحساب.</string>
+    <string name="get_pro_price">احصل على Pro • %1$s</string>
+    <string name="google_play_price">السعر عبر Google Play</string>
+    <string name="restore_purchases">استعادة المشتريات</string>
+    <string name="pro_themes">ثيمات Pro</string>
+    <string name="pro_theme_electric">Electric</string>
+    <string name="pro_theme_aurora">Aurora</string>
+    <string name="pro_theme_sunset">Sunset</string>
+    <string name="pro_insights">إحصاءات متقدمة</string>
+    <string name="pro_total_duration">إجمالي وقت التسجيل</string>
+    <string name="pro_highest_resolution">أعلى دقة</string>
+    <string name="pro_purchase_note">تتم المشتريات عبر Google Play. سيظهر السعر المحلي بعد إنشاء المنتج memorycapture_pro_lifetime داخل Play Console.</string>
+    <string name="upgrade_to_pro">الترقية إلى Pro</string>
+    <string name="upgrade_to_pro_body">افتح الثيمات الاحترافية والإحصاءات المتقدمة.</string>
+    <string name="pro_badge">PRO</string>
+
 </resources>
