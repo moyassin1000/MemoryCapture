@@ -1,6 +1,7 @@
 package com.memorycapture.app.navigation
 
 import android.net.Uri
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -13,12 +14,14 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -33,6 +36,7 @@ import com.memorycapture.app.startup.AppStartupState
 import com.memorycapture.app.startup.AppStartupViewModel
 import com.memorycapture.app.ui.capture.CaptureScreen
 import com.memorycapture.app.ui.home.HomeScreen
+import com.memorycapture.app.ui.pro.ProScreen
 import com.memorycapture.app.ui.recordings.RecordingDetailsScreen
 import com.memorycapture.app.ui.recordings.RecordingsScreen
 import com.memorycapture.app.ui.settings.SettingsScreen
@@ -68,37 +72,47 @@ fun MemoryCaptureNavHost(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
-                    tonalElevation = 10.dp,
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    shape = RoundedCornerShape(30.dp),
+                    tonalElevation = 12.dp,
+                    shadowElevation = 18.dp,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
                 ) {
-                    bottomDestinations.forEach { item ->
-                        NavigationBarItem(
-                            selected = currentRoute == item.destination.route,
-                            onClick = {
-                                navController.navigate(item.destination.route) {
-                                    popUpTo(AppDestination.Home.route) {
-                                        saveState = true
+                    NavigationBar(
+                        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                        tonalElevation = 0.dp,
+                    ) {
+                        bottomDestinations.forEach { item ->
+                            NavigationBarItem(
+                                selected = currentRoute == item.destination.route,
+                                onClick = {
+                                    navController.navigate(item.destination.route) {
+                                        popUpTo(AppDestination.Home.route) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                            icon = {
-                                Icon(
-                                    imageVector = item.icon,
-                                    contentDescription = null,
-                                )
-                            },
-                            label = { Text(stringResource(item.labelRes)) },
-                        )
+                                },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                ),
+                                icon = {
+                                    Icon(
+                                        imageVector = item.icon,
+                                        contentDescription = null,
+                                    )
+                                },
+                                label = { Text(stringResource(item.labelRes)) },
+                            )
+                        }
                     }
                 }
             }
@@ -135,6 +149,7 @@ fun MemoryCaptureNavHost(
                     onOpenCapture = { navController.navigate(AppDestination.Capture.route) },
                     onOpenRecordings = { navController.navigate(AppDestination.Recordings.route) },
                     onOpenSettings = { navController.navigate(AppDestination.Settings.route) },
+                    onOpenPro = { navController.navigate(AppDestination.Pro.route) },
                 )
             }
 
@@ -163,7 +178,17 @@ fun MemoryCaptureNavHost(
                     onOpenUpdates = {
                         navController.navigate(AppDestination.Updates.route)
                     },
+                    onOpenPro = {
+                        navController.navigate(AppDestination.Pro.route)
+                    },
                     onExitApp = onExitApp,
+                )
+            }
+
+
+            composable(AppDestination.Pro.route) {
+                ProScreen(
+                    onBack = { navController.popBackStack() },
                 )
             }
 

@@ -1,12 +1,19 @@
 package com.memorycapture.app.ui.recordings
 
 import android.content.Intent
+import android.os.Build
+import android.util.Size
 import android.net.Uri
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,13 +48,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -59,7 +71,9 @@ import com.memorycapture.app.data.recordings.RecordingItem
 import com.memorycapture.app.data.recordings.RecordingRepository
 import com.memorycapture.app.recording.SavedRecordingStore
 import com.memorycapture.app.ui.components.PremiumBackground
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 import kotlin.math.roundToInt
@@ -317,16 +331,51 @@ private fun RecordingCard(
     onDelete: () -> Unit,
     onDetails: () -> Unit,
 ) {
+    val thumbnail = rememberVideoThumbnail(item.uri)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(8.dp, MaterialTheme.shapes.medium),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (thumbnail != null) {
+                Image(
+                    bitmap = thumbnail,
+                    contentDescription = item.displayName,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(168.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .clickable(onClick = onPlay),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(126.dp)
+                        .background(
+                            MaterialTheme.colorScheme.primaryContainer,
+                            MaterialTheme.shapes.medium,
+                        )
+                        .clickable(onClick = onPlay),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.VideoLibrary,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(42.dp),
+                    )
+                }
+            }
+
             Row(
+                modifier = Modifier.padding(horizontal = 16.dp),
+
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -367,7 +416,9 @@ private fun RecordingCard(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 8.dp, bottom = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 IconButton(onClick = onPlay) {
@@ -395,6 +446,31 @@ private fun RecordingCard(
             }
         }
     }
+}
+
+
+@Composable
+private fun rememberVideoThumbnail(uriString: String): ImageBitmap? {
+    val context = LocalContext.current
+    val bitmap by produceState<android.graphics.Bitmap?>(
+        initialValue = null,
+        key1 = uriString,
+    ) {
+        value = withContext(Dispatchers.IO) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                runCatching {
+                    context.contentResolver.loadThumbnail(
+                        Uri.parse(uriString),
+                        Size(640, 360),
+                        null,
+                    )
+                }.getOrNull()
+            } else {
+                null
+            }
+        }
+    }
+    return bitmap?.asImageBitmap()
 }
 
 internal fun openVideo(context: android.content.Context, uriString: String) {

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -79,6 +80,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     onOpenUpdates: () -> Unit,
+    onOpenPro: () -> Unit,
     onExitApp: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -401,6 +403,15 @@ fun SettingsScreen(
             }
 
             item { SectionTitle(stringResource(R.string.app_section)) }
+
+            item {
+                SettingsRow(
+                    icon = Icons.Default.WorkspacePremium,
+                    title = stringResource(R.string.pro_title),
+                    subtitle = stringResource(R.string.upgrade_to_pro_body),
+                    onClick = onOpenPro,
+                )
+            }
 
             item {
                 SettingsRow(

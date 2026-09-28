@@ -7,6 +7,7 @@ sealed class AppDestination(val route: String) {
     data object Recordings : AppDestination("recordings")
     data object Settings : AppDestination("settings")
     data object Updates : AppDestination("updates")
+    data object Pro : AppDestination("pro")
     data object RecordingDetails : AppDestination("recording/{uri}") {
         fun createRoute(uri: String): String =
             "recording/${android.net.Uri.encode(uri)}"

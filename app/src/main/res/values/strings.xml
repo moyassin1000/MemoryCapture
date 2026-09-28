@@ -154,4 +154,35 @@
     <string name="storage_overview">Storage overview</string>
     <string name="capture_ready_message">Everything is ready for your next screen recording.</string>
 
+
+    <string name="pro_title">MemoryCapture Pro</string>
+    <string name="unlock_pro">Unlock MemoryCapture Pro</string>
+    <string name="pro_intro">One lifetime upgrade for premium themes, advanced library insights and an enhanced premium experience.</string>
+    <string name="pro_active">MemoryCapture Pro is active</string>
+    <string name="pro_active_body">Your lifetime Pro features are unlocked on this Google Play account.</string>
+    <string name="pro_lifetime_owned">Lifetime Pro owned</string>
+    <string name="pro_features">What you get</string>
+    <string name="pro_feature_themes">Premium themes</string>
+    <string name="pro_feature_themes_body">Choose Electric, Aurora or Sunset premium visual identities.</string>
+    <string name="pro_feature_insights">Advanced library insights</string>
+    <string name="pro_feature_insights_body">See total recording time, storage usage and your highest recording resolution.</string>
+    <string name="pro_feature_experience">Premium experience</string>
+    <string name="pro_feature_experience_body">Unlock the full premium visual identity and Pro-only customization.</string>
+    <string name="pro_feature_lifetime">Lifetime unlock</string>
+    <string name="pro_feature_lifetime_body">A one-time Google Play purchase. Restore it on supported devices using the same Play account.</string>
+    <string name="get_pro_price">Get Pro • %1$s</string>
+    <string name="google_play_price">Google Play price</string>
+    <string name="restore_purchases">Restore purchases</string>
+    <string name="pro_themes">Pro themes</string>
+    <string name="pro_theme_electric">Electric</string>
+    <string name="pro_theme_aurora">Aurora</string>
+    <string name="pro_theme_sunset">Sunset</string>
+    <string name="pro_insights">Advanced insights</string>
+    <string name="pro_total_duration">Total recording time</string>
+    <string name="pro_highest_resolution">Highest resolution</string>
+    <string name="pro_purchase_note">Purchases are handled by Google Play. Product availability and localized pricing appear after memorycapture_pro_lifetime is configured in Play Console.</string>
+    <string name="upgrade_to_pro">Upgrade to Pro</string>
+    <string name="upgrade_to_pro_body">Unlock premium themes and advanced insights.</string>
+    <string name="pro_badge">PRO</string>
+
 </resources>
