@@ -33,6 +33,7 @@ import com.memorycapture.app.startup.AppStartupState
 import com.memorycapture.app.startup.AppStartupViewModel
 import com.memorycapture.app.ui.capture.CaptureScreen
 import com.memorycapture.app.ui.home.HomeScreen
+import com.memorycapture.app.ui.pro.ProScreen
 import com.memorycapture.app.ui.recordings.RecordingDetailsScreen
 import com.memorycapture.app.ui.recordings.RecordingsScreen
 import com.memorycapture.app.ui.settings.SettingsScreen
@@ -135,6 +136,7 @@ fun MemoryCaptureNavHost(
                     onOpenCapture = { navController.navigate(AppDestination.Capture.route) },
                     onOpenRecordings = { navController.navigate(AppDestination.Recordings.route) },
                     onOpenSettings = { navController.navigate(AppDestination.Settings.route) },
+                    onOpenPro = { navController.navigate(AppDestination.Pro.route) },
                 )
             }
 
@@ -163,7 +165,17 @@ fun MemoryCaptureNavHost(
                     onOpenUpdates = {
                         navController.navigate(AppDestination.Updates.route)
                     },
+                    onOpenPro = {
+                        navController.navigate(AppDestination.Pro.route)
+                    },
                     onExitApp = onExitApp,
+                )
+            }
+
+
+            composable(AppDestination.Pro.route) {
+                ProScreen(
+                    onBack = { navController.popBackStack() },
                 )
             }
 
