@@ -212,14 +212,4 @@
     <string name="pro_showcase_title">Built for power users</string>
     <string name="pro_showcase_body">Unlock a stronger visual identity, premium themes, advanced insights and lifetime access.</string>
 
-
-    <string name="fullscreen">Fullscreen</string>
-    <string name="exit_fullscreen">Exit fullscreen</string>
-    <string name="picture_in_picture">Picture in picture</string>
-    <string name="brightness_percent">Brightness %1$d%%</string>
-    <string name="volume_percent">Volume %1$d%%</string>
-    <string name="player_gesture_hint">Swipe horizontally to seek • left side for brightness • right side for volume</string>
-    <string name="live_session">Live session</string>
-    <string name="live_session_body">Your screen recording is active. You can keep navigating inside MemoryCapture.</string>
-
 </resources>
