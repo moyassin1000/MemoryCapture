@@ -134,4 +134,14 @@
 
     <string name="cancel">Cancel</string>
     <string name="back">Back</string>
+
+    <string name="dashboard">Dashboard</string>
+    <string name="quick_actions">Quick actions</string>
+    <string name="all_recordings">All</string>
+    <string name="favorites">Favorites</string>
+    <string name="no_favorites_yet">No favorite recordings yet</string>
+    <string name="no_favorites_body">Tap the heart on a recording to keep it here.</string>
+    <string name="add_to_favorites">Add to favorites</string>
+    <string name="remove_from_favorites">Remove from favorites</string>
+
 </resources>
