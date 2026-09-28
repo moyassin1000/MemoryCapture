@@ -92,7 +92,7 @@ fun RecordingDetailsScreen(
                 title = { Text(stringResource(R.string.recording_details)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
             )
