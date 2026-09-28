@@ -14,6 +14,7 @@ import android.media.MediaFormat
 import android.media.MediaRecorder
 import android.media.projection.MediaProjection
 import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.memorycapture.app.data.preferences.AudioMode
 import java.nio.ByteBuffer
@@ -100,11 +101,15 @@ class AudioCaptureEngine(
         val localPlayback = if (
             mode == AudioMode.DeviceAudio || mode == AudioMode.DeviceAndMic
         ) {
-            createPlaybackRecord(
-                projection = projection,
-                format = format,
-                bufferSize = bufferSize,
-            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                createPlaybackRecord(
+                    projection = projection,
+                    format = format,
+                    bufferSize = bufferSize,
+                )
+            } else {
+                error("Internal device audio capture requires Android 10 or newer.")
+            }
         } else {
             null
         }
@@ -424,6 +429,7 @@ class AudioCaptureEngine(
         return bytes
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun createPlaybackRecord(
         projection: MediaProjection,
         format: AudioFormat,
