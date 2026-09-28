@@ -35,6 +35,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +46,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +58,7 @@ import com.memorycapture.app.data.preferences.AppPreferences
 import com.memorycapture.app.data.recordings.RecordingItem
 import com.memorycapture.app.data.recordings.RecordingRepository
 import com.memorycapture.app.recording.SavedRecordingStore
+import com.memorycapture.app.ui.components.PremiumBackground
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -165,32 +169,38 @@ fun RecordingsScreen(
             }
         }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        stringResource(R.string.recordings_tab),
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
-                actions = {
-                    IconButton(
-                        onClick = {
+    PremiumBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                    ),
+                    title = {
+                        Text(
+                            stringResource(R.string.recordings_tab),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Black,
+                        )
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = {
                             sort = when (sort) {
                                 RecordingSort.Newest -> RecordingSort.Oldest
                                 RecordingSort.Oldest -> RecordingSort.Largest
                                 RecordingSort.Largest -> RecordingSort.Newest
                             }
                         },
-                    ) {
-                        Icon(Icons.Default.Sort, contentDescription = stringResource(R.string.sort))
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
+                        ) {
+                            Icon(Icons.Default.Sort, contentDescription = stringResource(R.string.sort))
+                        }
+                    },
+                )
+            },
+        ) { padding ->
+            Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
@@ -293,6 +303,7 @@ fun RecordingsScreen(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -306,7 +317,11 @@ private fun RecordingCard(
     onDelete: () -> Unit,
     onDetails: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(8.dp, MaterialTheme.shapes.medium),
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),

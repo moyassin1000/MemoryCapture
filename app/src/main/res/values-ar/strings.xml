@@ -144,4 +144,14 @@
     <string name="add_to_favorites">إضافة إلى المفضلة</string>
     <string name="remove_from_favorites">إزالة من المفضلة</string>
 
+
+    <string name="startup_stage_initializing">جارٍ تشغيل MemoryCapture…</string>
+    <string name="startup_stage_preparing">جارٍ تجهيز مساحة العمل…</string>
+    <string name="startup_stage_optimizing">جارٍ تحسين التجربة…</string>
+    <string name="startup_stage_ready">جاهز</string>
+    <string name="control_center">مركز التحكم</string>
+    <string name="recording_profile">إعدادات التسجيل الحالية</string>
+    <string name="storage_overview">ملخص التخزين</string>
+    <string name="capture_ready_message">كل شيء جاهز لبدء تسجيل الشاشة التالي.</string>
+
 </resources>

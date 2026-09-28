@@ -153,6 +153,45 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .shadow(16.dp, MaterialTheme.shapes.large),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.90f),
+                            ),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(22.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.VideoCameraBack,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                    Column {
+                                        Text(
+                                            text = stringResource(R.string.control_center),
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Black,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.capture_ready_message),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    item {
                         RecordingStatusCard(
                             state = state,
                             elapsed = elapsed,

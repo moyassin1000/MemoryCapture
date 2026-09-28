@@ -144,4 +144,14 @@
     <string name="add_to_favorites">Add to favorites</string>
     <string name="remove_from_favorites">Remove from favorites</string>
 
+
+    <string name="startup_stage_initializing">Starting MemoryCapture…</string>
+    <string name="startup_stage_preparing">Preparing your workspace…</string>
+    <string name="startup_stage_optimizing">Optimizing the experience…</string>
+    <string name="startup_stage_ready">Ready</string>
+    <string name="control_center">Control center</string>
+    <string name="recording_profile">Recording profile</string>
+    <string name="storage_overview">Storage overview</string>
+    <string name="capture_ready_message">Everything is ready for your next screen recording.</string>
+
 </resources>
