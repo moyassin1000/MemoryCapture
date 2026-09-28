@@ -201,7 +201,7 @@ fun VideoPlayerScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(if (fullscreen || inPip) androidx.compose.foundation.layout.PaddingValues() else padding),
+                    .padding(if (fullscreen || inPip) androidx.compose.foundation.layout.PaddingValues(0.dp) else padding),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Box(
@@ -260,7 +260,7 @@ fun VideoPlayerScreen(
                                                 host.window.attributes = host.window.attributes.apply {
                                                     screenBrightness = brightness
                                                 }
-                                                gestureText = stringResource(
+                                                gestureText = context.getString(
                                                     R.string.brightness_percent,
                                                     (brightness * 100).toInt(),
                                                 )
@@ -275,7 +275,7 @@ fun VideoPlayerScreen(
                                                 0,
                                             )
                                             val percent = if (max > 0) volume * 100 / max else 0
-                                            gestureText = stringResource(
+                                            gestureText = context.getString(
                                                 R.string.volume_percent,
                                                 percent,
                                             )
