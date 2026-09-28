@@ -1,6 +1,9 @@
 package com.memorycapture.app.ui.capture
 
 import android.content.Intent
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,9 +39,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -77,6 +83,37 @@ fun CaptureScreen(
     val audioMode by preferences.audioMode.collectAsStateWithLifecycle(
         initialValue = AudioMode.DeviceAndMic,
     )
+    val microphoneDeviceId by preferences.microphoneDeviceId.collectAsStateWithLifecycle(
+        initialValue = -1,
+    )
+    val audioManager = remember {
+        context.getSystemService(AudioManager::class.java)
+    }
+    var inputDevices by remember {
+        mutableStateOf(
+            audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).toList(),
+        )
+    }
+
+    DisposableEffect(audioManager) {
+        val callback = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+                inputDevices = audioManager
+                    .getDevices(AudioManager.GET_DEVICES_INPUTS)
+                    .toList()
+            }
+
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+                inputDevices = audioManager
+                    .getDevices(AudioManager.GET_DEVICES_INPUTS)
+                    .toList()
+            }
+        }
+        audioManager.registerAudioDeviceCallback(callback, null)
+        onDispose {
+            audioManager.unregisterAudioDeviceCallback(callback)
+        }
+    }
     val state by RecordingStateStore.state.collectAsStateWithLifecycle()
     val countdown by CountdownStore.seconds.collectAsStateWithLifecycle()
     val startedAt by RecordingSessionStore.startedAtElapsedRealtime.collectAsStateWithLifecycle()
@@ -236,10 +273,17 @@ fun CaptureScreen(
                 item {
                     AudioStudioCard(
                         selected = audioMode,
+                        selectedMicDeviceId = microphoneDeviceId,
+                        inputDevices = inputDevices,
                         enabled = !active && !busy,
                         onSelect = { mode ->
                             scope.launch {
                                 preferences.setAudioMode(mode)
+                            }
+                        },
+                        onMicrophoneSelect = { deviceId ->
+                            scope.launch {
+                                preferences.setMicrophoneDeviceId(deviceId)
                             }
                         },
                     )
@@ -316,8 +360,11 @@ fun CaptureScreen(
 @Composable
 private fun AudioStudioCard(
     selected: AudioMode,
+    selectedMicDeviceId: Int,
+    inputDevices: List<AudioDeviceInfo>,
     enabled: Boolean,
     onSelect: (AudioMode) -> Unit,
+    onMicrophoneSelect: (Int) -> Unit,
 ) {
     val internalSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
 
@@ -416,9 +463,75 @@ private fun AudioStudioCard(
 
             if (selected == AudioMode.Microphone || selected == AudioMode.DeviceAndMic) {
                 Text(
-                    text = stringResource(R.string.audio_route_auto),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
+                    text = stringResource(R.string.microphone_source),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Black,
+                )
+
+                MicrophoneInputCard(
+                    title = stringResource(R.string.microphone_source_auto),
+                    selected = selectedMicDeviceId < 0,
+                    enabled = enabled,
+                    onClick = { onMicrophoneSelect(-1) },
+                )
+
+                inputDevices.forEach { device ->
+                    MicrophoneInputCard(
+                        title = device.productName?.toString()
+                            ?.takeIf { it.isNotBlank() }
+                            ?: stringResource(R.string.microphone_connected_inputs),
+                        selected = selectedMicDeviceId == device.id,
+                        enabled = enabled,
+                        onClick = { onMicrophoneSelect(device.id) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun MicrophoneInputCard(
+    title: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f)
+                },
+                RoundedCornerShape(16.dp),
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Default.Mic,
+            contentDescription = null,
+            tint = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (selected) FontWeight.Black else FontWeight.Medium,
+            )
+            if (selected) {
+                Text(
+                    text = stringResource(R.string.microphone_device_selected),
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
