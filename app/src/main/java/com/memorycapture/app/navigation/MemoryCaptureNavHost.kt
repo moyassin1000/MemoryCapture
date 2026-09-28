@@ -215,6 +215,7 @@ fun MemoryCaptureNavHost(
                     onBack = { navController.popBackStack() },
                 )
             }
+            }
 
             if (recordingActive && currentRoute != AppDestination.Splash.route) {
                 Box(
