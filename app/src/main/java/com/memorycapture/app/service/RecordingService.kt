@@ -75,6 +75,10 @@ class RecordingService : Service() {
                 customTreeUri = intent.getStringExtra(EXTRA_STORAGE_TREE_URI),
                 customStorageLabel = intent.getStringExtra(EXTRA_STORAGE_LABEL),
                 audioMode = audioMode,
+                preferredMicDeviceId = intent.getIntExtra(
+                    EXTRA_MICROPHONE_DEVICE_ID,
+                    -1,
+                ),
             )
         }.onSuccess {
             RecordingSessionStore.markStarted()
@@ -229,6 +233,7 @@ class RecordingService : Service() {
         const val EXTRA_STORAGE_TREE_URI = "storage_tree_uri"
         const val EXTRA_STORAGE_LABEL = "storage_label"
         const val EXTRA_AUDIO_MODE = "audio_mode"
+        const val EXTRA_MICROPHONE_DEVICE_ID = "microphone_device_id"
         private const val CHANNEL_ID = "recording"
         private const val NOTIFICATION_ID = 1001
     }
