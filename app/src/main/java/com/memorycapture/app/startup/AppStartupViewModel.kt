@@ -19,7 +19,7 @@ class AppStartupViewModel : ViewModel() {
 
     init {
         viewModelScope.launch {
-            delay(1_650)
+            delay(3_000)
             mutableState.value = AppStartupState.Ready
         }
     }
