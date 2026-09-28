@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -23,6 +25,7 @@ import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,12 +76,14 @@ fun RecordingsScreen(
     val repository = remember { RecordingRepository(context.applicationContext) }
     val preferences = remember { AppPreferences(context.applicationContext) }
     val customTreeUri by preferences.storageTreeUri.collectAsStateWithLifecycle(initialValue = null)
+    val favorites by preferences.favoriteRecordings.collectAsStateWithLifecycle(initialValue = emptySet())
     val saved by SavedRecordingStore.recording.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     var recordings by remember { mutableStateOf<List<RecordingItem>>(emptyList()) }
     var query by remember { mutableStateOf("") }
     var sort by remember { mutableStateOf(RecordingSort.Newest) }
+    var favoritesOnly by remember { mutableStateOf(false) }
     var refreshKey by remember { mutableIntStateOf(0) }
     var deleteTarget by remember { mutableStateOf<RecordingItem?>(null) }
     var renameTarget by remember { mutableStateOf<RecordingItem?>(null) }
@@ -99,6 +104,7 @@ fun RecordingsScreen(
                         deleteTarget = null
                         scope.launch {
                             repository.delete(item.uri)
+                            preferences.removeFavoriteRecording(item.uri)
                             refreshKey++
                         }
                     },
@@ -150,6 +156,7 @@ fun RecordingsScreen(
 
     val filtered = recordings
         .filter { it.displayName.contains(query, ignoreCase = true) }
+        .filter { !favoritesOnly || it.uri in favorites }
         .let { list ->
             when (sort) {
                 RecordingSort.Newest -> list.sortedByDescending { it.dateAddedMillis }
@@ -188,7 +195,7 @@ fun RecordingsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             OutlinedTextField(
                 value = query,
@@ -201,6 +208,25 @@ fun RecordingsScreen(
                 label = { Text(stringResource(R.string.search_recordings)) },
             )
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = !favoritesOnly,
+                    onClick = { favoritesOnly = false },
+                    label = { Text(stringResource(R.string.all_recordings)) },
+                )
+                FilterChip(
+                    selected = favoritesOnly,
+                    onClick = { favoritesOnly = true },
+                    leadingIcon = {
+                        Icon(Icons.Default.Favorite, contentDescription = null)
+                    },
+                    label = { Text(stringResource(R.string.favorites)) },
+                )
+            }
+
             if (filtered.isEmpty()) {
                 Column(
                     modifier = Modifier
@@ -210,24 +236,30 @@ fun RecordingsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Icon(
-                        imageVector = Icons.Default.VideoLibrary,
+                        imageVector = if (favoritesOnly) Icons.Default.FavoriteBorder else Icons.Default.VideoLibrary,
                         contentDescription = null,
                         modifier = Modifier.size(72.dp),
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text = stringResource(R.string.no_recordings_yet),
+                        text = stringResource(
+                            if (favoritesOnly) R.string.no_favorites_yet else R.string.no_recordings_yet,
+                        ),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(top = 16.dp),
                     )
                     Text(
-                        text = stringResource(R.string.no_recordings_body),
+                        text = stringResource(
+                            if (favoritesOnly) R.string.no_favorites_body else R.string.no_recordings_body,
+                        ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 6.dp, bottom = 18.dp),
                     )
-                    Button(onClick = onGoToCapture) {
-                        Text(stringResource(R.string.start_recording))
+                    if (!favoritesOnly) {
+                        Button(onClick = onGoToCapture) {
+                            Text(stringResource(R.string.start_recording))
+                        }
                     }
                 }
             } else {
@@ -241,6 +273,12 @@ fun RecordingsScreen(
                     ) { item ->
                         RecordingCard(
                             item = item,
+                            favorite = item.uri in favorites,
+                            onFavorite = {
+                                scope.launch {
+                                    preferences.toggleFavoriteRecording(item.uri)
+                                }
+                            },
                             onPlay = { openVideo(context, item.uri) },
                             onShare = { shareVideo(context, item.uri) },
                             onRename = {
@@ -260,6 +298,8 @@ fun RecordingsScreen(
 @Composable
 private fun RecordingCard(
     item: RecordingItem,
+    favorite: Boolean,
+    onFavorite: () -> Unit,
     onPlay: () -> Unit,
     onShare: () -> Unit,
     onRename: () -> Unit,
@@ -298,6 +338,15 @@ private fun RecordingCard(
                         ).format(Date(item.dateAddedMillis)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onFavorite) {
+                    Icon(
+                        imageVector = if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = stringResource(
+                            if (favorite) R.string.remove_from_favorites else R.string.add_to_favorites,
+                        ),
+                        tint = if (favorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
