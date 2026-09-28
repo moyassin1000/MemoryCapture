@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -44,6 +45,11 @@ import androidx.navigation.navArgument
 import com.memorycapture.app.R
 import com.memorycapture.app.startup.AppStartupState
 import com.memorycapture.app.startup.AppStartupViewModel
+import com.memorycapture.app.recording.RecordingSessionStore
+import com.memorycapture.app.recording.RecordingState
+import com.memorycapture.app.recording.RecordingStateStore
+import com.memorycapture.app.ui.components.GlobalRecordingPill
+import com.memorycapture.app.ui.components.rememberRecordingElapsed
 import com.memorycapture.app.ui.capture.CaptureScreen
 import com.memorycapture.app.ui.home.HomeScreen
 import com.memorycapture.app.ui.pro.ProScreen
@@ -62,6 +68,10 @@ fun MemoryCaptureNavHost(
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    val recordingState by RecordingStateStore.state.collectAsStateWithLifecycle()
+    val startedAt by RecordingSessionStore.startedAtElapsedRealtime.collectAsStateWithLifecycle()
+    val elapsed = rememberRecordingElapsed(startedAt)
+    val recordingActive = recordingState is RecordingState.Recording || recordingState is RecordingState.Paused
 
     val dockRoutes = setOf(
         AppDestination.Home.route,
@@ -108,11 +118,15 @@ fun MemoryCaptureNavHost(
             }
         },
     ) { outerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = AppDestination.Splash.route,
-            modifier = Modifier.padding(outerPadding),
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(outerPadding),
         ) {
+            NavHost(
+                navController = navController,
+                startDestination = AppDestination.Splash.route,
+            ) {
             composable(AppDestination.Splash.route) {
                 val startupViewModel: AppStartupViewModel = viewModel()
                 val startupState by startupViewModel.state.collectAsStateWithLifecycle()
@@ -200,6 +214,21 @@ fun MemoryCaptureNavHost(
                     uriString = Uri.decode(encoded),
                     onBack = { navController.popBackStack() },
                 )
+            }
+
+            if (recordingActive && currentRoute != AppDestination.Splash.route) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 10.dp),
+                ) {
+                    GlobalRecordingPill(
+                        elapsed = elapsed,
+                        label = stringResource(R.string.status_recording),
+                        stopLabel = stringResource(R.string.notification_stop),
+                        onStop = onStopRecording,
+                    )
+                }
             }
         }
     }
