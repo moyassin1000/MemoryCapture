@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -48,6 +49,10 @@ class AppPreferences(
         it[KEY_UPDATE_NOTIFICATIONS] ?: false
     }
 
+    val favoriteRecordings: Flow<Set<String>> = context.memoryCaptureDataStore.data.map {
+        it[KEY_FAVORITE_RECORDINGS] ?: emptySet()
+    }
+
     suspend fun setThemeMode(mode: ThemeMode) {
         context.memoryCaptureDataStore.edit { it[KEY_THEME] = mode.name }
     }
@@ -80,6 +85,23 @@ class AppPreferences(
         }
     }
 
+    suspend fun toggleFavoriteRecording(uri: String) {
+        context.memoryCaptureDataStore.edit { preferences ->
+            val current = preferences[KEY_FAVORITE_RECORDINGS] ?: emptySet()
+            preferences[KEY_FAVORITE_RECORDINGS] =
+                if (uri in current) current - uri else current + uri
+        }
+    }
+
+    suspend fun removeFavoriteRecording(uri: String) {
+        context.memoryCaptureDataStore.edit { preferences ->
+            val current = preferences[KEY_FAVORITE_RECORDINGS] ?: emptySet()
+            if (uri in current) {
+                preferences[KEY_FAVORITE_RECORDINGS] = current - uri
+            }
+        }
+    }
+
     companion object {
         private val KEY_THEME = stringPreferencesKey("theme")
         private val KEY_COUNTDOWN_ENABLED = booleanPreferencesKey("countdown_enabled")
@@ -87,5 +109,6 @@ class AppPreferences(
         private val KEY_STORAGE_TREE_URI = stringPreferencesKey("storage_tree_uri")
         private val KEY_STORAGE_LABEL = stringPreferencesKey("storage_label")
         private val KEY_UPDATE_NOTIFICATIONS = booleanPreferencesKey("update_notifications")
+        private val KEY_FAVORITE_RECORDINGS = stringSetPreferencesKey("favorite_recordings")
     }
 }

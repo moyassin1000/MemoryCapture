@@ -118,6 +118,9 @@ fun MemoryCaptureNavHost(
                 HomeScreen(
                     onStartRecording = onRequestRecording,
                     onStopRecording = onStopRecording,
+                    onOpenCapture = { navController.navigate(AppDestination.Capture.route) },
+                    onOpenRecordings = { navController.navigate(AppDestination.Recordings.route) },
+                    onOpenSettings = { navController.navigate(AppDestination.Settings.route) },
                 )
             }
 

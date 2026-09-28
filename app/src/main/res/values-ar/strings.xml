@@ -134,4 +134,14 @@
 
     <string name="cancel">إلغاء</string>
     <string name="back">رجوع</string>
+
+    <string name="dashboard">لوحة التحكم</string>
+    <string name="quick_actions">إجراءات سريعة</string>
+    <string name="all_recordings">الكل</string>
+    <string name="favorites">المفضلة</string>
+    <string name="no_favorites_yet">لا توجد تسجيلات مفضلة بعد</string>
+    <string name="no_favorites_body">اضغط على رمز القلب في أي تسجيل لإضافته هنا.</string>
+    <string name="add_to_favorites">إضافة إلى المفضلة</string>
+    <string name="remove_from_favorites">إزالة من المفضلة</string>
+
 </resources>

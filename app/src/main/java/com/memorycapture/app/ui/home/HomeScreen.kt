@@ -1,5 +1,8 @@
 package com.memorycapture.app.ui.home
 
+import android.os.Environment
+import android.os.StatFs
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,10 +12,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.VideoCameraBack
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -20,13 +29,21 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.memorycapture.app.R
+import com.memorycapture.app.data.preferences.AppPreferences
+import com.memorycapture.app.data.recordings.RecordingRepository
 import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.RecordingSessionStore
 import com.memorycapture.app.recording.RecordingState
@@ -42,18 +59,42 @@ import com.memorycapture.app.ui.components.rememberRecordingElapsed
 fun HomeScreen(
     onStartRecording: () -> Unit,
     onStopRecording: () -> Unit,
+    onOpenCapture: () -> Unit,
+    onOpenRecordings: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val repository = remember { RecordingRepository(context.applicationContext) }
+    val preferences = remember { AppPreferences(context.applicationContext) }
+    val storageTreeUri by preferences.storageTreeUri.collectAsStateWithLifecycle(initialValue = null)
+    val storageLabel by preferences.storageLabel.collectAsStateWithLifecycle(initialValue = null)
+
     val state by RecordingStateStore.state.collectAsStateWithLifecycle()
     val countdown by CountdownStore.seconds.collectAsStateWithLifecycle()
     val savedRecording by SavedRecordingStore.recording.collectAsStateWithLifecycle()
     val startedAt by RecordingSessionStore.startedAtElapsedRealtime.collectAsStateWithLifecycle()
     val elapsed = rememberRecordingElapsed(startedAt)
 
+    var recordingCount by remember { mutableStateOf(0) }
+    var usedStorage by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(storageTreeUri, savedRecording?.displayName) {
+        val recordings = repository.loadRecordings(storageTreeUri)
+        recordingCount = recordings.size
+        usedStorage = recordings.sumOf { it.sizeBytes }
+    }
+
     countdown?.let {
         CountdownDialog(
             seconds = it,
             title = stringResource(R.string.countdown_title),
         )
+    }
+
+    val availableBytes = remember {
+        runCatching {
+            StatFs(Environment.getDataDirectory().absolutePath).availableBytes
+        }.getOrDefault(0L)
     }
 
     Scaffold(
@@ -113,6 +154,75 @@ fun HomeScreen(
 
             item {
                 Text(
+                    text = stringResource(R.string.dashboard),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    DashboardCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Default.VideoLibrary,
+                        label = stringResource(R.string.recording_count),
+                        value = recordingCount.toString(),
+                        onClick = onOpenRecordings,
+                    )
+                    DashboardCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Default.Storage,
+                        label = stringResource(R.string.used_storage),
+                        value = formatStorage(usedStorage),
+                    )
+                    DashboardCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Default.FolderOpen,
+                        label = stringResource(R.string.available_storage),
+                        value = formatStorage(availableBytes),
+                    )
+                }
+            }
+
+            item {
+                Text(
+                    text = stringResource(R.string.quick_actions),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    QuickActionCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Default.VideoCameraBack,
+                        title = stringResource(R.string.capture_tab),
+                        onClick = onOpenCapture,
+                    )
+                    QuickActionCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Default.VideoLibrary,
+                        title = stringResource(R.string.recordings_tab),
+                        onClick = onOpenRecordings,
+                    )
+                    QuickActionCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Default.Settings,
+                        title = stringResource(R.string.settings),
+                        onClick = onOpenSettings,
+                    )
+                }
+            }
+
+            item {
+                Text(
                     text = stringResource(R.string.quick_settings),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
@@ -145,6 +255,32 @@ fun HomeScreen(
                 }
             }
 
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    ),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.storage_location),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Text(
+                            text = storageLabel ?: stringResource(R.string.default_storage),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+            }
+
             savedRecording?.let { saved ->
                 item {
                     Text(
@@ -154,7 +290,11 @@ fun HomeScreen(
                     )
                 }
                 item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onOpenRecordings),
+                    ) {
                         Row(
                             modifier = Modifier.padding(18.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -194,6 +334,50 @@ fun HomeScreen(
 }
 
 @Composable
+private fun DashboardCard(
+    modifier: Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    onClick: (() -> Unit)? = null,
+) {
+    Card(
+        modifier = modifier.then(
+            if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun QuickActionCard(
+    modifier: Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 18.dp, horizontal = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
 private fun QuickInfoCard(
     modifier: Modifier,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -213,5 +397,16 @@ private fun QuickInfoCard(
             Text(label, style = MaterialTheme.typography.labelMedium)
             Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
         }
+    }
+}
+
+private fun formatStorage(bytes: Long): String {
+    if (bytes <= 0L) return "0 MB"
+    val gb = bytes / 1024.0 / 1024.0 / 1024.0
+    return if (gb >= 1.0) {
+        String.format(java.util.Locale.US, "%.1f GB", gb)
+    } else {
+        val mb = bytes / 1024.0 / 1024.0
+        String.format(java.util.Locale.US, "%.0f MB", mb)
     }
 }
