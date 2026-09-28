@@ -212,14 +212,4 @@
     <string name="pro_showcase_title">مصمم للمستخدمين المتقدمين</string>
     <string name="pro_showcase_body">افتح هوية بصرية أقوى وثيمات Premium وإحصاءات متقدمة ووصول دائم.</string>
 
-
-    <string name="fullscreen">ملء الشاشة</string>
-    <string name="exit_fullscreen">الخروج من ملء الشاشة</string>
-    <string name="picture_in_picture">صورة داخل صورة</string>
-    <string name="brightness_percent">السطوع %1$d%%</string>
-    <string name="volume_percent">الصوت %1$d%%</string>
-    <string name="player_gesture_hint">اسحب أفقيًا للتقديم والرجوع • الجانب الأيسر للسطوع • الجانب الأيمن للصوت</string>
-    <string name="live_session">جلسة تسجيل مباشرة</string>
-    <string name="live_session_body">تسجيل الشاشة نشط الآن ويمكنك الاستمرار في التنقل داخل MemoryCapture.</string>
-
 </resources>

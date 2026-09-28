@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
-import android.content.res.Configuration
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -27,7 +26,6 @@ import com.memorycapture.app.recording.RecordingStateStore
 import com.memorycapture.app.recording.SavedRecordingStore
 import com.memorycapture.app.service.RecordingService
 import com.memorycapture.app.ui.theme.MemoryCaptureTheme
-import com.memorycapture.app.ui.player.PlayerUiModeStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -73,7 +71,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        ProBillingManager.initialize(applicationContext)
+        runCatching { ProBillingManager.initialize(applicationContext) }
 
         setContent {
             val themeMode = preferences.themeMode.collectAsStateWithLifecycle(
@@ -133,16 +131,8 @@ class MainActivity : AppCompatActivity() {
         ContextCompat.startForegroundService(this, intent)
     }
 
-    override fun onPictureInPictureModeChanged(
-        isInPictureInPictureMode: Boolean,
-        newConfig: Configuration,
-    ) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        PlayerUiModeStore.setPictureInPicture(isInPictureInPictureMode)
-    }
-
     override fun onDestroy() {
-        if (isFinishing) ProBillingManager.close()
+        if (isFinishing) runCatching { ProBillingManager.close() }
         super.onDestroy()
     }
 
