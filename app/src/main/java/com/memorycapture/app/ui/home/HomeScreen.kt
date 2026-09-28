@@ -2,6 +2,10 @@ package com.memorycapture.app.ui.home
 
 import android.os.Environment
 import android.os.StatFs
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,6 +41,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -50,9 +57,11 @@ import com.memorycapture.app.recording.RecordingState
 import com.memorycapture.app.recording.RecordingStateStore
 import com.memorycapture.app.recording.SavedRecordingStore
 import com.memorycapture.app.ui.components.CountdownDialog
+import com.memorycapture.app.ui.components.PremiumBackground
 import com.memorycapture.app.ui.components.PrimaryRecordingButton
 import com.memorycapture.app.ui.components.RecordingStatusCard
 import com.memorycapture.app.ui.components.rememberRecordingElapsed
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,6 +86,12 @@ fun HomeScreen(
 
     var recordingCount by remember { mutableStateOf(0) }
     var usedStorage by remember { mutableLongStateOf(0L) }
+    var contentVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        delay(120)
+        contentVisible = true
+    }
 
     LaunchedEffect(storageTreeUri, savedRecording?.displayName) {
         val recordings = repository.loadRecordings(storageTreeUri)
@@ -97,237 +112,260 @@ fun HomeScreen(
         }.getOrDefault(0L)
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = stringResource(R.string.app_name),
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            text = stringResource(R.string.home_tagline),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            item {
-                RecordingStatusCard(
-                    state = state,
-                    elapsed = elapsed,
-                    readyLabel = stringResource(R.string.ready_to_record),
-                    recordingLabel = stringResource(R.string.status_recording),
-                    savingLabel = stringResource(R.string.status_processing),
-                    savedLabel = stringResource(R.string.status_completed),
-                    errorLabel = stringResource(R.string.status_error),
-                )
-            }
-
-            item {
-                val active = state is RecordingState.Recording || state is RecordingState.Paused
-                val busy = state is RecordingState.Preparing ||
-                    state is RecordingState.PermissionRequired ||
-                    state is RecordingState.Countdown ||
-                    state is RecordingState.Stopping ||
-                    state is RecordingState.Processing
-
-                PrimaryRecordingButton(
-                    active = active,
-                    enabled = !busy,
-                    startText = stringResource(R.string.start_recording),
-                    stopText = stringResource(R.string.stop_recording),
-                    onClick = if (active) onStopRecording else onStartRecording,
-                )
-            }
-
-            item {
-                Text(
-                    text = stringResource(R.string.dashboard),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    DashboardCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.VideoLibrary,
-                        label = stringResource(R.string.recording_count),
-                        value = recordingCount.toString(),
-                        onClick = onOpenRecordings,
-                    )
-                    DashboardCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Storage,
-                        label = stringResource(R.string.used_storage),
-                        value = formatStorage(usedStorage),
-                    )
-                    DashboardCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.FolderOpen,
-                        label = stringResource(R.string.available_storage),
-                        value = formatStorage(availableBytes),
-                    )
-                }
-            }
-
-            item {
-                Text(
-                    text = stringResource(R.string.quick_actions),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    QuickActionCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.VideoCameraBack,
-                        title = stringResource(R.string.capture_tab),
-                        onClick = onOpenCapture,
-                    )
-                    QuickActionCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.VideoLibrary,
-                        title = stringResource(R.string.recordings_tab),
-                        onClick = onOpenRecordings,
-                    )
-                    QuickActionCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Settings,
-                        title = stringResource(R.string.settings),
-                        onClick = onOpenSettings,
-                    )
-                }
-            }
-
-            item {
-                Text(
-                    text = stringResource(R.string.quick_settings),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    QuickInfoCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.HighQuality,
-                        label = stringResource(R.string.quality),
-                        value = stringResource(R.string.quality_1080p),
-                    )
-                    QuickInfoCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Speed,
-                        label = stringResource(R.string.frame_rate),
-                        value = stringResource(R.string.fps_30),
-                    )
-                    QuickInfoCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.AudioFile,
-                        label = stringResource(R.string.audio),
-                        value = stringResource(R.string.no_audio),
-                    )
-                }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+    PremiumBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
                     ),
+                    title = {
+                        Column {
+                            Text(
+                                text = stringResource(R.string.app_name),
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Black,
+                            )
+                            Text(
+                                text = stringResource(R.string.home_tagline),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                )
+            },
+        ) { padding ->
+            AnimatedVisibility(
+                visible = contentVisible,
+                enter = fadeIn(tween(650)) +
+                    slideInVertically(
+                        animationSpec = tween(700),
+                        initialOffsetY = { it / 8 },
+                    ),
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    Column(
-                        modifier = Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.storage_location),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        Text(
-                            text = storageLabel ?: stringResource(R.string.default_storage),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    item {
+                        RecordingStatusCard(
+                            state = state,
+                            elapsed = elapsed,
+                            readyLabel = stringResource(R.string.ready_to_record),
+                            recordingLabel = stringResource(R.string.status_recording),
+                            savingLabel = stringResource(R.string.status_processing),
+                            savedLabel = stringResource(R.string.status_completed),
+                            errorLabel = stringResource(R.string.status_error),
                         )
                     }
-                }
-            }
 
-            savedRecording?.let { saved ->
-                item {
-                    Text(
-                        text = stringResource(R.string.last_recording),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-                item {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = onOpenRecordings),
-                    ) {
+                    item {
+                        val active = state is RecordingState.Recording || state is RecordingState.Paused
+                        val busy = state is RecordingState.Preparing ||
+                            state is RecordingState.PermissionRequired ||
+                            state is RecordingState.Countdown ||
+                            state is RecordingState.Stopping ||
+                            state is RecordingState.Processing
+
+                        PrimaryRecordingButton(
+                            active = active,
+                            enabled = !busy,
+                            startText = stringResource(R.string.start_recording),
+                            stopText = stringResource(R.string.stop_recording),
+                            onClick = if (active) onStopRecording else onStartRecording,
+                        )
+                    }
+
+                    item {
+                        Text(
+                            text = stringResource(R.string.dashboard),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black,
+                        )
+                    }
+
+                    item {
                         Row(
-                            modifier = Modifier.padding(18.dp),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Movie,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                            DashboardCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.VideoLibrary,
+                                label = stringResource(R.string.recording_count),
+                                value = recordingCount.toString(),
+                                onClick = onOpenRecordings,
                             )
-                            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            DashboardCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.Storage,
+                                label = stringResource(R.string.used_storage),
+                                value = formatStorage(usedStorage),
+                            )
+                            DashboardCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.FolderOpen,
+                                label = stringResource(R.string.available_storage),
+                                value = formatStorage(availableBytes),
+                            )
+                        }
+                    }
+
+                    item {
+                        Text(
+                            text = stringResource(R.string.quick_actions),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black,
+                        )
+                    }
+
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            QuickActionCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.VideoCameraBack,
+                                title = stringResource(R.string.capture_tab),
+                                onClick = onOpenCapture,
+                            )
+                            QuickActionCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.VideoLibrary,
+                                title = stringResource(R.string.recordings_tab),
+                                onClick = onOpenRecordings,
+                            )
+                            QuickActionCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.Settings,
+                                title = stringResource(R.string.settings),
+                                onClick = onOpenSettings,
+                            )
+                        }
+                    }
+
+                    item {
+                        Text(
+                            text = stringResource(R.string.quick_settings),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black,
+                        )
+                    }
+
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            QuickInfoCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.HighQuality,
+                                label = stringResource(R.string.quality),
+                                value = stringResource(R.string.quality_1080p),
+                            )
+                            QuickInfoCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.Speed,
+                                label = stringResource(R.string.frame_rate),
+                                value = stringResource(R.string.fps_30),
+                            )
+                            QuickInfoCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.AudioFile,
+                                label = stringResource(R.string.audio),
+                                value = stringResource(R.string.no_audio),
+                            )
+                        }
+                    }
+
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .shadow(10.dp, MaterialTheme.shapes.large),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.88f),
+                            ),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
                                 Text(
-                                    text = saved.displayName,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
+                                    text = stringResource(R.string.storage_location),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 )
                                 Text(
-                                    text = saved.location,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    text = storageLabel ?: stringResource(R.string.default_storage),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Black,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 )
                             }
                         }
                     }
-                }
-            }
 
-            item {
-                Text(
-                    text = stringResource(R.string.unlimited_recording_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 24.dp),
-                )
+                    savedRecording?.let { saved ->
+                        item {
+                            Text(
+                                text = stringResource(R.string.last_recording),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Black,
+                            )
+                        }
+
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .shadow(10.dp, MaterialTheme.shapes.large)
+                                    .clickable(onClick = onOpenRecordings),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                                ),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(20.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Movie,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                        Text(
+                                            text = saved.displayName,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                        Text(
+                                            text = saved.location,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        Text(
+                            text = stringResource(R.string.unlimited_recording_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 28.dp),
+                        )
+                    }
+                }
             }
         }
     }
@@ -342,17 +380,26 @@ private fun DashboardCard(
     onClick: (() -> Unit)? = null,
 ) {
     Card(
-        modifier = modifier.then(
-            if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+        modifier = modifier
+            .shadow(8.dp, MaterialTheme.shapes.medium)
+            .then(
+                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         ),
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -365,14 +412,19 @@ private fun QuickActionCard(
     onClick: () -> Unit,
 ) {
     Card(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier
+            .shadow(8.dp, MaterialTheme.shapes.medium)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        ),
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 18.dp, horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(vertical = 19.dp, horizontal = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
         ) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -384,10 +436,15 @@ private fun QuickInfoCard(
     label: String,
     value: String,
 ) {
-    Card(modifier = modifier) {
+    Card(
+        modifier = modifier.shadow(7.dp, MaterialTheme.shapes.medium),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        ),
+    ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(13.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Icon(
                 imageVector = icon,
@@ -395,7 +452,7 @@ private fun QuickInfoCard(
                 tint = MaterialTheme.colorScheme.primary,
             )
             Text(label, style = MaterialTheme.typography.labelMedium)
-            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
         }
     }
 }
