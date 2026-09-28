@@ -79,12 +79,20 @@ class RecordingService : Service() {
         }.onSuccess {
             RecordingSessionStore.markStarted()
             RecordingStateStore.transition(RecordingState.Recording)
-        }.onFailure {
+        }.onFailure { error ->
             recorderEngine.abort()
             RecordingSessionStore.clear()
             intentionalStop = true
             projectionController.stop()
-            RecordingStateStore.forceError(RecordingError.EncoderUnavailable)
+
+            val reason = when {
+                error is SecurityException -> RecordingError.MicrophoneDenied
+                error.message?.contains("audio", ignoreCase = true) == true ->
+                    RecordingError.AudioCaptureUnsupported
+                else -> RecordingError.EncoderUnavailable
+            }
+
+            RecordingStateStore.forceError(reason)
             stopForegroundAndSelf()
         }
     }
