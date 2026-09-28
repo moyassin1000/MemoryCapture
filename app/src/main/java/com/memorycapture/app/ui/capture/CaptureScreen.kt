@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -15,7 +16,9 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.VideoCameraBack
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -23,11 +26,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -41,6 +47,7 @@ import com.memorycapture.app.recording.RecordingSessionStore
 import com.memorycapture.app.recording.RecordingState
 import com.memorycapture.app.recording.RecordingStateStore
 import com.memorycapture.app.ui.components.CountdownDialog
+import com.memorycapture.app.ui.components.PremiumBackground
 import com.memorycapture.app.ui.components.PrimaryRecordingButton
 import com.memorycapture.app.ui.components.RecordingStatusCard
 import com.memorycapture.app.ui.components.rememberRecordingElapsed
@@ -85,105 +92,165 @@ fun CaptureScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        stringResource(R.string.capture_tab),
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            item {
-                RecordingStatusCard(
-                    state = state,
-                    elapsed = elapsed,
-                    readyLabel = stringResource(R.string.ready_to_record),
-                    recordingLabel = stringResource(R.string.status_recording),
-                    savingLabel = stringResource(R.string.status_processing),
-                    savedLabel = stringResource(R.string.status_completed),
-                    errorLabel = stringResource(R.string.status_error),
+    PremiumBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                    ),
+                    title = {
+                        Column {
+                            Text(
+                                stringResource(R.string.capture_tab),
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Black,
+                            )
+                            Text(
+                                stringResource(R.string.capture_ready_message),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
                 )
-            }
-
-            item {
-                CaptureOptionCard(
-                    icon = Icons.Default.Folder,
-                    title = stringResource(R.string.storage_location),
-                    value = storageLabel ?: stringResource(R.string.default_storage),
-                ) {
-                    OutlinedButton(onClick = { folderPicker.launch(null) }) {
-                        Text(stringResource(R.string.change))
+            },
+        ) { padding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(14.dp, MaterialTheme.shapes.large),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+                        ),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(22.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.VideoCameraBack,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.control_center),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Black,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                                Text(
+                                    text = stringResource(R.string.recording_profile),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f),
+                                )
+                            }
+                        }
                     }
                 }
-            }
 
-            item {
-                CaptureOptionCard(
-                    icon = Icons.Default.HighQuality,
-                    title = stringResource(R.string.quality),
-                    value = stringResource(R.string.quality_1080p),
-                )
-            }
+                item {
+                    RecordingStatusCard(
+                        state = state,
+                        elapsed = elapsed,
+                        readyLabel = stringResource(R.string.ready_to_record),
+                        recordingLabel = stringResource(R.string.status_recording),
+                        savingLabel = stringResource(R.string.status_processing),
+                        savedLabel = stringResource(R.string.status_completed),
+                        errorLabel = stringResource(R.string.status_error),
+                    )
+                }
 
-            item {
-                CaptureOptionCard(
-                    icon = Icons.Default.Speed,
-                    title = stringResource(R.string.frame_rate),
-                    value = stringResource(R.string.fps_30),
-                )
-            }
+                item {
+                    val active = state is RecordingState.Recording || state is RecordingState.Paused
+                    val busy = state is RecordingState.Preparing ||
+                        state is RecordingState.PermissionRequired ||
+                        state is RecordingState.Countdown ||
+                        state is RecordingState.Stopping ||
+                        state is RecordingState.Processing
 
-            item {
-                CaptureOptionCard(
-                    icon = Icons.Default.GraphicEq,
-                    title = stringResource(R.string.audio),
-                    value = stringResource(R.string.no_audio_coming_soon),
-                )
-            }
+                    PrimaryRecordingButton(
+                        active = active,
+                        enabled = !busy,
+                        startText = stringResource(R.string.start_recording),
+                        stopText = stringResource(R.string.stop_recording),
+                        onClick = if (active) onStopRecording else onStartRecording,
+                    )
+                }
 
-            item {
-                CaptureOptionCard(
-                    icon = Icons.Default.AllInclusive,
-                    title = stringResource(R.string.recording_duration),
-                    value = stringResource(R.string.unlimited_until_stopped),
-                )
-            }
+                item {
+                    Text(
+                        text = stringResource(R.string.recording_profile),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                    )
+                }
 
-            item {
-                val active = state is RecordingState.Recording || state is RecordingState.Paused
-                val busy = state is RecordingState.Preparing ||
-                    state is RecordingState.PermissionRequired ||
-                    state is RecordingState.Countdown ||
-                    state is RecordingState.Stopping ||
-                    state is RecordingState.Processing
+                item {
+                    CaptureOptionCard(
+                        icon = Icons.Default.Folder,
+                        title = stringResource(R.string.storage_location),
+                        value = storageLabel ?: stringResource(R.string.default_storage),
+                    ) {
+                        OutlinedButton(onClick = { folderPicker.launch(null) }) {
+                            Text(stringResource(R.string.change))
+                        }
+                    }
+                }
 
-                PrimaryRecordingButton(
-                    active = active,
-                    enabled = !busy,
-                    startText = stringResource(R.string.start_recording),
-                    stopText = stringResource(R.string.stop_recording),
-                    onClick = if (active) onStopRecording else onStartRecording,
-                )
-            }
+                item {
+                    CaptureOptionCard(
+                        icon = Icons.Default.HighQuality,
+                        title = stringResource(R.string.quality),
+                        value = stringResource(R.string.quality_1080p),
+                    )
+                }
 
-            item {
-                Text(
-                    text = stringResource(R.string.unlimited_device_limits_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 24.dp),
-                )
+                item {
+                    CaptureOptionCard(
+                        icon = Icons.Default.Speed,
+                        title = stringResource(R.string.frame_rate),
+                        value = stringResource(R.string.fps_30),
+                    )
+                }
+
+                item {
+                    CaptureOptionCard(
+                        icon = Icons.Default.GraphicEq,
+                        title = stringResource(R.string.audio),
+                        value = stringResource(R.string.no_audio_coming_soon),
+                    )
+                }
+
+                item {
+                    CaptureOptionCard(
+                        icon = Icons.Default.AllInclusive,
+                        title = stringResource(R.string.recording_duration),
+                        value = stringResource(R.string.unlimited_until_stopped),
+                    )
+                }
+
+                item {
+                    Text(
+                        text = stringResource(R.string.unlimited_device_limits_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 28.dp),
+                    )
+                }
             }
         }
     }
@@ -196,8 +263,15 @@ private fun CaptureOptionCard(
     value: String,
     action: (@Composable () -> Unit)? = null,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        androidx.compose.foundation.layout.Row(
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(8.dp, MaterialTheme.shapes.medium),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        ),
+    ) {
+        Row(
             modifier = Modifier.padding(18.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -210,7 +284,11 @@ private fun CaptureOptionCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
                 Text(
                     value,
                     style = MaterialTheme.typography.bodyMedium,
