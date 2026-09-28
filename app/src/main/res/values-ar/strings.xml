@@ -92,7 +92,7 @@
     <string name="seconds_10">10 ثوانٍ</string>
     <string name="disabled">معطل</string>
     <string name="storage_section">التخزين</string>
-    <string name="available_storage">المساحة المتاحة</string>
+    <string name="available_storage">المساحة المتاحة</string>\n    <string name="open_recordings_folder">فتح مجلد التسجيلات</string>\n    <string name="recording_count">عدد التسجيلات</string>\n    <string name="used_storage">المساحة المستخدمة</string>
     <string name="restore_default_storage">استخدام المجلد الافتراضي</string>
     <string name="appearance_section">المظهر واللغة</string>
     <string name="appearance">المظهر</string>
