@@ -16,6 +16,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.memorycapture.app.billing.ProBillingManager
 import com.memorycapture.app.data.preferences.AppPreferences
+import com.memorycapture.app.data.preferences.AudioMode
 import com.memorycapture.app.data.preferences.ProAccent
 import com.memorycapture.app.data.preferences.ThemeMode
 import com.memorycapture.app.navigation.MemoryCaptureNavHost
@@ -62,6 +63,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val audioPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            lifecycleScope.launch { continueRecordingPermissionFlow() }
+        } else {
+            RecordingStateStore.forceError(RecordingError.MicrophoneDenied)
+        }
+    }
+
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) {
@@ -98,8 +109,28 @@ class MainActivity : AppCompatActivity() {
 
     private fun requestRecording() {
         if (!RecordingStateStore.transition(RecordingState.Preparing)) return
+        lifecycleScope.launch {
+            continueRecordingPermissionFlow()
+        }
+    }
 
-        if (Build.VERSION.SDK_INT >= 33 &&
+    private suspend fun continueRecordingPermissionFlow() {
+        val audioMode = effectiveAudioMode(preferences.audioMode.first())
+
+        if (
+            audioMode != AudioMode.None &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            RecordingStateStore.transition(RecordingState.PermissionRequired)
+            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+
+        if (
+            Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.POST_NOTIFICATIONS,
@@ -120,6 +151,7 @@ class MainActivity : AppCompatActivity() {
     private suspend fun startRecordingService(resultCode: Int, resultData: Intent) {
         val storageTreeUri = preferences.storageTreeUri.first()
         val storageLabel = preferences.storageLabel.first()
+        val audioMode = effectiveAudioMode(preferences.audioMode.first())
 
         val intent = Intent(this, RecordingService::class.java)
             .setAction(RecordingService.ACTION_START)
@@ -127,9 +159,20 @@ class MainActivity : AppCompatActivity() {
             .putExtra(RecordingService.EXTRA_RESULT_DATA, resultData)
             .putExtra(RecordingService.EXTRA_STORAGE_TREE_URI, storageTreeUri)
             .putExtra(RecordingService.EXTRA_STORAGE_LABEL, storageLabel)
+            .putExtra(RecordingService.EXTRA_AUDIO_MODE, audioMode.name)
 
         ContextCompat.startForegroundService(this, intent)
     }
+
+    private fun effectiveAudioMode(mode: AudioMode): AudioMode =
+        if (
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            (mode == AudioMode.DeviceAudio || mode == AudioMode.DeviceAndMic)
+        ) {
+            AudioMode.Microphone
+        } else {
+            mode
+        }
 
     override fun onDestroy() {
         if (isFinishing) runCatching { ProBillingManager.close() }
