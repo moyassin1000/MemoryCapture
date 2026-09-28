@@ -194,4 +194,13 @@
     <string name="grid_view">عرض شبكي</string>
     <string name="list_view">عرض قائمة</string>
 
+
+    <string name="settings_command_center">ملخص الإعدادات</string>
+    <string name="pro_compare_title">مقارنة المجاني وPro</string>
+    <string name="pro_compare_free">مجاني</string>
+    <string name="pro_compare_pro">Pro</string>
+    <string name="pro_compare_core">تسجيل الشاشة</string>
+    <string name="pro_compare_themes">ثيمات Premium</string>
+    <string name="pro_compare_insights">إحصاءات متقدمة</string>
+
 </resources>

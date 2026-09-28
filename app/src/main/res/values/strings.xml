@@ -194,4 +194,13 @@
     <string name="grid_view">Grid view</string>
     <string name="list_view">List view</string>
 
+
+    <string name="settings_command_center">Settings overview</string>
+    <string name="pro_compare_title">Free vs Pro</string>
+    <string name="pro_compare_free">Free</string>
+    <string name="pro_compare_pro">Pro</string>
+    <string name="pro_compare_core">Screen recording</string>
+    <string name="pro_compare_themes">Premium themes</string>
+    <string name="pro_compare_insights">Advanced insights</string>
+
 </resources>
