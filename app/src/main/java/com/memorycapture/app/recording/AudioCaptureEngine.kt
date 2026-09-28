@@ -402,6 +402,20 @@ class AudioCaptureEngine(
         playbackBytes: Int,
         out: ByteArray,
     ): Int {
+        if (micBytes <= 0 && playbackBytes <= 0) return 0
+
+        if (micBytes <= 0) {
+            val bytes = playbackBytes.coerceAtLeast(0).and(-2)
+            playbackBuffer.copyInto(out, endIndex = bytes)
+            return bytes
+        }
+
+        if (playbackBytes <= 0) {
+            val bytes = micBytes.coerceAtLeast(0).and(-2)
+            micBuffer.copyInto(out, endIndex = bytes)
+            return bytes
+        }
+
         val bytes = minOf(micBytes, playbackBytes)
             .coerceAtLeast(0)
             .and(-2)
