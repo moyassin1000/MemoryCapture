@@ -229,4 +229,10 @@
     <string name="audio_ready">AAC • 48 كيلوهرتز • متزامن مع الفيديو</string>
     <string name="audio_permission_denied">لم يتم منح إذن الميكروفون/الصوت.</string>
 
+
+    <string name="microphone_source">مصدر الميكروفون</string>
+    <string name="microphone_source_auto">اختيار تلقائي</string>
+    <string name="microphone_connected_inputs">مداخل الصوت المتصلة</string>
+    <string name="microphone_device_selected">مدخل مفضّل</string>
+
 </resources>
