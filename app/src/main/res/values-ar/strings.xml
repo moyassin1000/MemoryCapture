@@ -42,11 +42,14 @@
     <string name="notification_text">يتم الآن تسجيل فيديو الشاشة.</string>
     <string name="notification_stop">إيقاف</string>
     <string name="settings_title">الإعدادات</string>
-    <string name="settings_privacy_title">الخصوصية أولًا</string>
-    <string name="settings_privacy_body">تبقى التسجيلات محلية افتراضيًا. التطبيق لا يبدأ تسجيلًا مخفيًا ويحترم النوافذ المحمية.</string>
-    <string name="settings_language_title">اللغات</string>
-    <string name="settings_language_body">العربية والإنجليزية مدعومتان.</string>
-    <string name="settings_phase_title">نسخة تسجيل الشاشة</string>
-    <string name="settings_phase_body">يتم حفظ تسجيل الشاشة بصيغة MP4 داخل Movies/MemoryCapture. سنضيف التقاط الصوت بشكل منفصل للحفاظ على استقرار حفظ الفيديو.</string>
+    <string name="settings_privacy_title">الخصوصية</string>
+    <string name="settings_privacy_body">تظل التسجيلات محلية افتراضيًا وتبقى النوافذ المحمية محمية.</string>
+    <string name="settings_language_title">اللغة</string>
+    <string name="settings_recording_title">التسجيل</string>
+    <string name="settings_recording_body">يتم حفظ تسجيلات الشاشة محليًا داخل Movies/MemoryCapture.</string>
+    <string name="choose_language">اختر اللغة</string>
+    <string name="language_arabic">العربية</string>
+    <string name="language_english">English</string>
+    <string name="cancel">إلغاء</string>
     <string name="back">رجوع</string>
 </resources>
