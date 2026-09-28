@@ -2,7 +2,6 @@ package com.memorycapture.app
 
 import android.Manifest
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
@@ -14,9 +13,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.memorycapture.app.navigation.MemoryCaptureNavHost
+import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.RecordingError
 import com.memorycapture.app.recording.RecordingState
 import com.memorycapture.app.recording.RecordingStateStore
+import com.memorycapture.app.recording.SavedRecordingStore
 import com.memorycapture.app.service.RecordingService
 import com.memorycapture.app.ui.theme.MemoryCaptureTheme
 import kotlinx.coroutines.delay
@@ -33,10 +34,18 @@ class MainActivity : ComponentActivity() {
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             lifecycleScope.launch {
                 RecordingStateStore.transition(RecordingState.Countdown)
-                repeat(3) { delay(350) }
+                SavedRecordingStore.clear()
+
+                for (second in 3 downTo 1) {
+                    CountdownStore.show(second)
+                    delay(1_000)
+                }
+
+                CountdownStore.clear()
                 startRecordingService(result.resultCode, requireNotNull(result.data))
             }
         } else {
+            CountdownStore.clear()
             RecordingStateStore.forceError(RecordingError.MediaProjectionDenied)
         }
     }
@@ -63,7 +72,10 @@ class MainActivity : ComponentActivity() {
         if (!RecordingStateStore.transition(RecordingState.Preparing)) return
 
         if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) != PackageManager.PERMISSION_GRANTED
         ) {
             RecordingStateStore.transition(RecordingState.PermissionRequired)
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -82,6 +94,7 @@ class MainActivity : ComponentActivity() {
             .setAction(RecordingService.ACTION_START)
             .putExtra(RecordingService.EXTRA_RESULT_CODE, resultCode)
             .putExtra(RecordingService.EXTRA_RESULT_DATA, resultData)
+
         ContextCompat.startForegroundService(this, intent)
     }
 

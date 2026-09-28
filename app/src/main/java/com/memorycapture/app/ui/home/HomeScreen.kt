@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,11 +29,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.memorycapture.app.R
+import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.RecordingState
 import com.memorycapture.app.recording.RecordingStateStore
+import com.memorycapture.app.recording.SavedRecordingStore
 
 private data class Choice(@StringRes val label: Int)
 
@@ -44,9 +49,35 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
 ) {
     val state by RecordingStateStore.state.collectAsStateWithLifecycle()
-    var audio by remember { mutableStateOf(Choice(R.string.device_and_mic)) }
+    val countdown by CountdownStore.seconds.collectAsStateWithLifecycle()
+    val savedRecording by SavedRecordingStore.recording.collectAsStateWithLifecycle()
+
+    var audio by remember { mutableStateOf(Choice(R.string.no_audio)) }
     var quality by remember { mutableStateOf(Choice(R.string.quality_1080p)) }
     var fps by remember { mutableStateOf(Choice(R.string.fps_30)) }
+
+    if (countdown != null) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = {
+                Text(
+                    text = stringResource(R.string.countdown_title),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                )
+            },
+            text = {
+                Text(
+                    text = countdown.toString(),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    fontSize = 64.sp,
+                    style = MaterialTheme.typography.displayLarge,
+                )
+            },
+            confirmButton = {},
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -54,7 +85,10 @@ fun HomeScreen(
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = stringResource(R.string.settings),
+                        )
                     }
                 },
             )
@@ -79,54 +113,86 @@ fun HomeScreen(
                     )
                 }
             }
+
             item {
                 SettingCard(
                     title = stringResource(R.string.audio),
                     value = stringResource(audio.label),
-                    options = listOf(
-                        Choice(R.string.no_audio),
-                        Choice(R.string.microphone),
-                        Choice(R.string.device_audio),
-                        Choice(R.string.device_and_mic),
-                    ),
+                    options = listOf(Choice(R.string.no_audio)),
                     onSelected = { audio = it },
                 )
             }
+
+            item {
+                Text(
+                    text = stringResource(R.string.audio_phase_note),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
             item {
                 SettingCard(
                     title = stringResource(R.string.quality),
                     value = stringResource(quality.label),
                     options = listOf(
-                        Choice(R.string.quality_auto),
-                        Choice(R.string.quality_720p),
                         Choice(R.string.quality_1080p),
-                        Choice(R.string.quality_1440p),
                     ),
                     onSelected = { quality = it },
                 )
             }
+
             item {
                 SettingCard(
                     title = stringResource(R.string.frame_rate),
                     value = stringResource(fps.label),
                     options = listOf(
-                        Choice(R.string.fps_auto),
                         Choice(R.string.fps_30),
-                        Choice(R.string.fps_60),
                     ),
                     onSelected = { fps = it },
                 )
             }
+
             item {
                 Text(
                     text = stringResource(R.string.recording_status, stateLabel(state)),
                     style = MaterialTheme.typography.titleMedium,
                 )
             }
+
+            savedRecording?.let { saved ->
+                item {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.video_saved),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(saved.displayName)
+                            Text(
+                                text = stringResource(
+                                    R.string.saved_location,
+                                    saved.location,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+
             item {
                 val active = state is RecordingState.Recording || state is RecordingState.Paused
+                val busy = state is RecordingState.Preparing ||
+                    state is RecordingState.PermissionRequired ||
+                    state is RecordingState.Countdown ||
+                    state is RecordingState.Stopping ||
+                    state is RecordingState.Processing
+
                 Button(
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = !busy,
                     onClick = if (active) onStopRecording else onStartRecording,
                 ) {
                     Icon(
@@ -135,7 +201,9 @@ fun HomeScreen(
                     )
                     Text(
                         modifier = Modifier.padding(start = 8.dp),
-                        text = stringResource(if (active) R.string.stop_recording else R.string.start_recording),
+                        text = stringResource(
+                            if (active) R.string.stop_recording else R.string.start_recording,
+                        ),
                     )
                 }
             }
@@ -157,15 +225,9 @@ private fun SettingCard(
         ) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(value, style = MaterialTheme.typography.bodyLarge)
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                options.take(2).forEach { option ->
-                    Button(onClick = { onSelected(option) }) {
-                        Text(stringResource(option.label))
-                    }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                options.drop(2).forEach { option ->
+                options.forEach { option ->
                     Button(onClick = { onSelected(option) }) {
                         Text(stringResource(option.label))
                     }

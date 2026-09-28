@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">MemoryCapture</string>
     <string name="home_title">Capture your moments</string>
-    <string name="home_subtitle">Record your screen with the audio modes Android allows.</string>
+    <string name="home_subtitle">Record your screen and save the video directly to your phone.</string>
     <string name="start_recording">Start recording</string>
     <string name="stop_recording">Stop recording</string>
     <string name="settings">Settings</string>
@@ -28,21 +28,25 @@
     <string name="status_recording">Recording</string>
     <string name="status_paused">Paused</string>
     <string name="status_stopping">Stopping</string>
-    <string name="status_processing">Processing</string>
-    <string name="status_completed">Completed</string>
+    <string name="status_processing">Saving video</string>
+    <string name="status_completed">Saved</string>
     <string name="status_error">Error</string>
     <string name="projection_denied">Screen capture permission was not granted.</string>
+    <string name="countdown_title">Recording starts in</string>
+    <string name="video_saved">Video saved successfully</string>
+    <string name="saved_location">Saved in: %1$s</string>
+    <string name="audio_phase_note">This build records screen video first. Microphone and device audio will be enabled in the next audio phase.</string>
     <string name="notification_channel_name">Active recording</string>
     <string name="notification_channel_description">Shows controls while MemoryCapture is recording.</string>
-    <string name="notification_title">MemoryCapture is active</string>
-    <string name="notification_text">Screen capture session is running.</string>
+    <string name="notification_title">MemoryCapture is recording</string>
+    <string name="notification_text">Your screen video is being recorded.</string>
     <string name="notification_stop">Stop</string>
     <string name="settings_title">Settings</string>
     <string name="settings_privacy_title">Privacy first</string>
     <string name="settings_privacy_body">Recordings stay local by default. MemoryCapture never starts a hidden recording and respects protected windows.</string>
     <string name="settings_language_title">Languages</string>
-    <string name="settings_language_body">English and Arabic are supported from the first version.</string>
-    <string name="settings_phase_title">Phase 1 build</string>
-    <string name="settings_phase_body">Screen permission flow and a real foreground MediaProjection service skeleton are enabled. Video encoding arrives in Phase 2.</string>
+    <string name="settings_language_body">English and Arabic are supported.</string>
+    <string name="settings_phase_title">Screen recording build</string>
+    <string name="settings_phase_body">Screen recording is saved as MP4 in Movies/MemoryCapture. Audio capture is added separately so video saving remains stable.</string>
     <string name="back">Back</string>
 </resources>

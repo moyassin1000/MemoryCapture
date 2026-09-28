@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">MemoryCapture</string>
     <string name="home_title">احتفظ بلحظاتك</string>
-    <string name="home_subtitle">سجّل شاشة الهاتف مع أوضاع الصوت التي يسمح بها نظام أندرويد.</string>
+    <string name="home_subtitle">سجّل شاشة الهاتف واحفظ الفيديو مباشرة على جهازك.</string>
     <string name="start_recording">بدء التسجيل</string>
     <string name="stop_recording">إيقاف التسجيل</string>
     <string name="settings">الإعدادات</string>
@@ -28,21 +28,25 @@
     <string name="status_recording">جارٍ التسجيل</string>
     <string name="status_paused">متوقف مؤقتًا</string>
     <string name="status_stopping">جارٍ الإيقاف</string>
-    <string name="status_processing">جارٍ المعالجة</string>
-    <string name="status_completed">اكتمل</string>
+    <string name="status_processing">جارٍ حفظ الفيديو</string>
+    <string name="status_completed">تم الحفظ</string>
     <string name="status_error">خطأ</string>
     <string name="projection_denied">لم يتم منح إذن تصوير الشاشة.</string>
+    <string name="countdown_title">سيبدأ التسجيل خلال</string>
+    <string name="video_saved">تم حفظ الفيديو بنجاح</string>
+    <string name="saved_location">مكان الحفظ: %1$s</string>
+    <string name="audio_phase_note">هذه النسخة تسجل فيديو الشاشة أولًا. سنفعّل الميكروفون وصوت الجهاز في مرحلة الصوت التالية بعد تثبيت حفظ الفيديو.</string>
     <string name="notification_channel_name">التسجيل النشط</string>
     <string name="notification_channel_description">يعرض التحكم أثناء تسجيل MemoryCapture.</string>
-    <string name="notification_title">MemoryCapture يعمل الآن</string>
-    <string name="notification_text">جلسة التقاط الشاشة قيد التشغيل.</string>
+    <string name="notification_title">MemoryCapture يسجل الآن</string>
+    <string name="notification_text">يتم الآن تسجيل فيديو الشاشة.</string>
     <string name="notification_stop">إيقاف</string>
     <string name="settings_title">الإعدادات</string>
     <string name="settings_privacy_title">الخصوصية أولًا</string>
     <string name="settings_privacy_body">تبقى التسجيلات محلية افتراضيًا. التطبيق لا يبدأ تسجيلًا مخفيًا ويحترم النوافذ المحمية.</string>
     <string name="settings_language_title">اللغات</string>
-    <string name="settings_language_body">العربية والإنجليزية مدعومتان منذ الإصدار الأول.</string>
-    <string name="settings_phase_title">بناء المرحلة الأولى</string>
-    <string name="settings_phase_body">تم تفعيل مسار إذن تصوير الشاشة وهيكل خدمة MediaProjection حقيقي في المقدمة. ترميز الفيديو سيُضاف في المرحلة الثانية.</string>
+    <string name="settings_language_body">العربية والإنجليزية مدعومتان.</string>
+    <string name="settings_phase_title">نسخة تسجيل الشاشة</string>
+    <string name="settings_phase_body">يتم حفظ تسجيل الشاشة بصيغة MP4 داخل Movies/MemoryCapture. سنضيف التقاط الصوت بشكل منفصل للحفاظ على استقرار حفظ الفيديو.</string>
     <string name="back">رجوع</string>
 </resources>
