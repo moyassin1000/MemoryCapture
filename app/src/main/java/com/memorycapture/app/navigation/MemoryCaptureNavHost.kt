@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -69,7 +70,7 @@ fun MemoryCaptureNavHost(
             if (showBottomBar) {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
-                    tonalElevation = androidx.compose.ui.unit.dp(10f),
+                    tonalElevation = 10.dp,
                 ) {
                     bottomDestinations.forEach { item ->
                         NavigationBarItem(
