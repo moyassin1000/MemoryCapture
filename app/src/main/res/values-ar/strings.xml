@@ -144,4 +144,18 @@
     <string name="add_to_favorites">إضافة إلى المفضلة</string>
     <string name="remove_from_favorites">إزالة من المفضلة</string>
 
+
+    <string name="screen_capture_tip_title">لتسجيل الهاتف بالكامل</string>
+    <string name="screen_capture_tip_body">عندما يسألك أندرويد عما تريد مشاركته، اختر الشاشة بالكامل لتسجيل التنقل بين التطبيقات. اختيار تطبيق واحد يسجل هذا التطبيق فقط.</string>
+    <string name="recorder_health">حالة محرك التسجيل</string>
+    <string name="recorder_codec">المشفّر</string>
+    <string name="recorder_output">الإخراج</string>
+    <string name="recorder_frames">الإطارات المسجلة</string>
+    <string name="capture_visible">المحتوى ظاهر</string>
+    <string name="capture_hidden_warning">المحتوى الذي اخترته للتسجيل لم يعد ظاهرًا. ارجع إلى التطبيق المختار، أو أوقف التسجيل وابدأ من جديد مع اختيار الشاشة بالكامل.</string>
+    <string name="yes">نعم</string>
+    <string name="no">لا</string>
+    <string name="premium_control_center">مركز التحكم بالتسجيل</string>
+    <string name="recording_engine_ready">محرك H.264 متكيف وجاهز</string>
+
 </resources>
