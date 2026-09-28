@@ -185,4 +185,13 @@
     <string name="upgrade_to_pro_body">افتح الثيمات الاحترافية والإحصاءات المتقدمة.</string>
     <string name="pro_badge">PRO</string>
 
+
+    <string name="home_pro_member">عضو PRO • مساحة عمل احترافية</string>
+    <string name="home_control_center_subtitle">مركز التحكم في تصوير الشاشة</string>
+    <string name="home_recording_profile_line">1080p • 30 إطار/ث • تسجيل بدون حد</string>
+    <string name="home_library_overview">مكتبتك</string>
+    <string name="home_available_storage_value">%1$s متاحة</string>
+    <string name="grid_view">عرض شبكي</string>
+    <string name="list_view">عرض قائمة</string>
+
 </resources>

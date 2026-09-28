@@ -15,14 +15,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.HighQuality
-import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.VideoCameraBack
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Card
@@ -61,8 +56,7 @@ import com.memorycapture.app.recording.RecordingStateStore
 import com.memorycapture.app.recording.SavedRecordingStore
 import com.memorycapture.app.ui.components.CountdownDialog
 import com.memorycapture.app.ui.components.PremiumBackground
-import com.memorycapture.app.ui.components.PrimaryRecordingButton
-import com.memorycapture.app.ui.components.RecordingStatusCard
+import com.memorycapture.app.ui.components.RecordOrb
 import com.memorycapture.app.ui.components.rememberRecordingElapsed
 import kotlinx.coroutines.delay
 
@@ -79,9 +73,9 @@ fun HomeScreen(
     val context = LocalContext.current
     val repository = remember { RecordingRepository(context.applicationContext) }
     val preferences = remember { AppPreferences(context.applicationContext) }
+
     val storageTreeUri by preferences.storageTreeUri.collectAsStateWithLifecycle(initialValue = null)
     val storageLabel by preferences.storageLabel.collectAsStateWithLifecycle(initialValue = null)
-
     val state by RecordingStateStore.state.collectAsStateWithLifecycle()
     val proState by ProBillingManager.state.collectAsStateWithLifecycle()
     val countdown by CountdownStore.seconds.collectAsStateWithLifecycle()
@@ -117,6 +111,13 @@ fun HomeScreen(
         }.getOrDefault(0L)
     }
 
+    val active = state is RecordingState.Recording || state is RecordingState.Paused
+    val busy = state is RecordingState.Preparing ||
+        state is RecordingState.PermissionRequired ||
+        state is RecordingState.Countdown ||
+        state is RecordingState.Stopping ||
+        state is RecordingState.Processing
+
     PremiumBackground {
         Scaffold(
             containerColor = Color.Transparent,
@@ -133,7 +134,11 @@ fun HomeScreen(
                                 fontWeight = FontWeight.Black,
                             )
                             Text(
-                                text = stringResource(R.string.home_tagline),
+                                text = if (proState.isPro) {
+                                    stringResource(R.string.home_pro_member)
+                                } else {
+                                    stringResource(R.string.home_control_center_subtitle)
+                                },
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -151,16 +156,22 @@ fun HomeScreen(
                                 },
                             )
                         }
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = stringResource(R.string.settings),
+                            )
+                        }
                     },
                 )
             },
         ) { padding ->
             AnimatedVisibility(
                 visible = contentVisible,
-                enter = fadeIn(tween(650)) +
+                enter = fadeIn(tween(520)) +
                     slideInVertically(
-                        animationSpec = tween(700),
-                        initialOffsetY = { it / 8 },
+                        animationSpec = tween(620),
+                        initialOffsetY = { it / 10 },
                     ),
             ) {
                 LazyColumn(
@@ -168,87 +179,144 @@ fun HomeScreen(
                         .fillMaxSize()
                         .padding(padding)
                         .padding(horizontal = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
                     item {
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .shadow(16.dp, MaterialTheme.shapes.large),
+                                .shadow(20.dp, MaterialTheme.shapes.large),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.90f),
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
                             ),
                         ) {
                             Column(
-                                modifier = Modifier.padding(22.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(vertical = 28.dp, horizontal = 22.dp),
+                                verticalArrangement = Arrangement.spacedBy(18.dp),
                             ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.VideoCameraBack,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Text(
+                                        text = stringResource(
+                                            if (active) R.string.status_recording else R.string.ready_to_record,
+                                        ),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Black,
+                                        color = if (active) {
+                                            MaterialTheme.colorScheme.error
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
                                     )
-                                    Column {
-                                        Text(
-                                            text = stringResource(R.string.control_center),
-                                            style = MaterialTheme.typography.titleLarge,
-                                            fontWeight = FontWeight.Black,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.capture_ready_message),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f),
-                                        )
-                                    }
+                                    Text(
+                                        text = stringResource(R.string.home_recording_profile_line),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+
+                                RecordOrb(
+                                    active = active,
+                                    enabled = !busy,
+                                    label = stringResource(
+                                        if (active) R.string.stop_recording else R.string.start_recording,
+                                    ),
+                                    elapsed = elapsed,
+                                    onClick = if (active) onStopRecording else onStartRecording,
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                ) {
+                                    ProfileMetric("1080p", stringResource(R.string.quality))
+                                    ProfileMetric("30", stringResource(R.string.frame_rate))
+                                    ProfileMetric(
+                                        stringResource(R.string.no_audio),
+                                        stringResource(R.string.audio),
+                                    )
                                 }
                             }
                         }
                     }
 
                     item {
-                        RecordingStatusCard(
-                            state = state,
-                            elapsed = elapsed,
-                            readyLabel = stringResource(R.string.ready_to_record),
-                            recordingLabel = stringResource(R.string.status_recording),
-                            savingLabel = stringResource(R.string.status_processing),
-                            savedLabel = stringResource(R.string.status_completed),
-                            errorLabel = stringResource(R.string.status_error),
+                        Text(
+                            text = stringResource(R.string.home_library_overview),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black,
                         )
                     }
 
                     item {
-                        val active = state is RecordingState.Recording || state is RecordingState.Paused
-                        val busy = state is RecordingState.Preparing ||
-                            state is RecordingState.PermissionRequired ||
-                            state is RecordingState.Countdown ||
-                            state is RecordingState.Stopping ||
-                            state is RecordingState.Processing
-
-                        PrimaryRecordingButton(
-                            active = active,
-                            enabled = !busy,
-                            startText = stringResource(R.string.start_recording),
-                            stopText = stringResource(R.string.stop_recording),
-                            onClick = if (active) onStopRecording else onStartRecording,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            OverviewCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.VideoLibrary,
+                                value = recordingCount.toString(),
+                                label = stringResource(R.string.recording_count),
+                                onClick = onOpenRecordings,
+                            )
+                            OverviewCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Default.Storage,
+                                value = formatStorage(usedStorage),
+                                label = stringResource(R.string.used_storage),
+                            )
+                        }
                     }
 
                     item {
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .shadow(12.dp, MaterialTheme.shapes.large)
+                                .shadow(10.dp, MaterialTheme.shapes.large)
+                                .clickable(onClick = onOpenCapture),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                            ),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(18.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FolderOpen,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = storageLabel ?: stringResource(R.string.default_storage),
+                                        fontWeight = FontWeight.Black,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                    Text(
+                                        text = stringResource(
+                                            R.string.home_available_storage_value,
+                                            formatStorage(availableBytes),
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .shadow(10.dp, MaterialTheme.shapes.large)
                                 .clickable(onClick = onOpenPro),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (proState.isPro) {
-                                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.18f)
+                                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.16f)
                                 } else {
-                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
                                 },
                             ),
                         ) {
@@ -261,10 +329,7 @@ fun HomeScreen(
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.tertiary,
                                 )
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = if (proState.isPro) {
                                             stringResource(R.string.pro_active)
@@ -285,140 +350,8 @@ fun HomeScreen(
                                 }
                                 Text(
                                     text = stringResource(R.string.pro_badge),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Black,
                                     color = MaterialTheme.colorScheme.tertiary,
-                                )
-                            }
-                        }
-                    }
-
-                    item {
-                        Text(
-                            text = stringResource(R.string.dashboard),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black,
-                        )
-                    }
-
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            DashboardCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.VideoLibrary,
-                                label = stringResource(R.string.recording_count),
-                                value = recordingCount.toString(),
-                                onClick = onOpenRecordings,
-                            )
-                            DashboardCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.Storage,
-                                label = stringResource(R.string.used_storage),
-                                value = formatStorage(usedStorage),
-                            )
-                            DashboardCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.FolderOpen,
-                                label = stringResource(R.string.available_storage),
-                                value = formatStorage(availableBytes),
-                            )
-                        }
-                    }
-
-                    item {
-                        Text(
-                            text = stringResource(R.string.quick_actions),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black,
-                        )
-                    }
-
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            QuickActionCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.VideoCameraBack,
-                                title = stringResource(R.string.capture_tab),
-                                onClick = onOpenCapture,
-                            )
-                            QuickActionCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.VideoLibrary,
-                                title = stringResource(R.string.recordings_tab),
-                                onClick = onOpenRecordings,
-                            )
-                            QuickActionCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.Settings,
-                                title = stringResource(R.string.settings),
-                                onClick = onOpenSettings,
-                            )
-                        }
-                    }
-
-                    item {
-                        Text(
-                            text = stringResource(R.string.quick_settings),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black,
-                        )
-                    }
-
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            QuickInfoCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.HighQuality,
-                                label = stringResource(R.string.quality),
-                                value = stringResource(R.string.quality_1080p),
-                            )
-                            QuickInfoCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.Speed,
-                                label = stringResource(R.string.frame_rate),
-                                value = stringResource(R.string.fps_30),
-                            )
-                            QuickInfoCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.AudioFile,
-                                label = stringResource(R.string.audio),
-                                value = stringResource(R.string.no_audio),
-                            )
-                        }
-                    }
-
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .shadow(10.dp, MaterialTheme.shapes.large),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.88f),
-                            ),
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(20.dp),
-                                verticalArrangement = Arrangement.spacedBy(5.dp),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.storage_location),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                                Text(
-                                    text = storageLabel ?: stringResource(R.string.default_storage),
-                                    style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Black,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 )
                             }
                         }
@@ -426,44 +359,29 @@ fun HomeScreen(
 
                     savedRecording?.let { saved ->
                         item {
-                            Text(
-                                text = stringResource(R.string.last_recording),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Black,
-                            )
-                        }
-
-                        item {
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .shadow(10.dp, MaterialTheme.shapes.large)
                                     .clickable(onClick = onOpenRecordings),
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
                                 ),
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(20.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                Column(
+                                    modifier = Modifier.padding(18.dp),
+                                    verticalArrangement = Arrangement.spacedBy(5.dp),
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Movie,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
+                                    Text(
+                                        text = stringResource(R.string.last_recording),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.primary,
                                     )
-                                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                        Text(
-                                            text = saved.displayName,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold,
-                                        )
-                                        Text(
-                                            text = saved.location,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
+                                    Text(saved.displayName, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        saved.location,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                             }
                         }
@@ -474,7 +392,7 @@ fun HomeScreen(
                             text = stringResource(R.string.unlimited_recording_note),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 28.dp),
+                            modifier = Modifier.padding(bottom = 30.dp),
                         )
                     }
                 }
@@ -484,11 +402,30 @@ fun HomeScreen(
 }
 
 @Composable
-private fun DashboardCard(
+private fun ProfileMetric(
+    value: String,
+    label: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Black,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun OverviewCard(
     modifier: Modifier,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
     value: String,
+    label: String,
     onClick: (() -> Unit)? = null,
 ) {
     Card(
@@ -498,73 +435,24 @@ private fun DashboardCard(
                 if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
             ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
         ),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp),
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
             Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
+                text = value,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black,
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-    }
-}
-
-@Composable
-private fun QuickActionCard(
-    modifier: Modifier,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    onClick: () -> Unit,
-) {
-    Card(
-        modifier = modifier
-            .shadow(8.dp, MaterialTheme.shapes.medium)
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(vertical = 19.dp, horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp),
-        ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun QuickInfoCard(
-    modifier: Modifier,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    value: String,
-) {
-    Card(
-        modifier = modifier.shadow(7.dp, MaterialTheme.shapes.medium),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(13.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp),
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Text(label, style = MaterialTheme.typography.labelMedium)
-            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
         }
     }
 }

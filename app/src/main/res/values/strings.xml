@@ -185,4 +185,13 @@
     <string name="upgrade_to_pro_body">Unlock premium themes and advanced insights.</string>
     <string name="pro_badge">PRO</string>
 
+
+    <string name="home_pro_member">PRO member • premium workspace</string>
+    <string name="home_control_center_subtitle">Screen capture command center</string>
+    <string name="home_recording_profile_line">1080p • 30 FPS • unlimited session</string>
+    <string name="home_library_overview">Your library</string>
+    <string name="home_available_storage_value">%1$s available</string>
+    <string name="grid_view">Grid view</string>
+    <string name="list_view">List view</string>
+
 </resources>
