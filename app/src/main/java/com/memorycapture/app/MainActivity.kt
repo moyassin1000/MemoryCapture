@@ -14,7 +14,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import com.memorycapture.app.billing.ProBillingManager
 import com.memorycapture.app.data.preferences.AppPreferences
+import com.memorycapture.app.data.preferences.ProAccent
 import com.memorycapture.app.data.preferences.ThemeMode
 import com.memorycapture.app.navigation.MemoryCaptureNavHost
 import com.memorycapture.app.recording.CountdownStore
@@ -69,13 +71,22 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        ProBillingManager.initialize(applicationContext)
 
         setContent {
             val themeMode = preferences.themeMode.collectAsStateWithLifecycle(
                 initialValue = ThemeMode.System,
             ).value
+            val proAccent = preferences.proAccent.collectAsStateWithLifecycle(
+                initialValue = ProAccent.Electric,
+            ).value
+            val proState = ProBillingManager.state.collectAsStateWithLifecycle().value
 
-            MemoryCaptureTheme(themeMode = themeMode) {
+            MemoryCaptureTheme(
+                themeMode = themeMode,
+                proAccent = proAccent,
+                proEnabled = proState.isPro,
+            ) {
                 MemoryCaptureNavHost(
                     onRequestRecording = ::requestRecording,
                     onStopRecording = ::stopRecordingService,
@@ -118,6 +129,11 @@ class MainActivity : AppCompatActivity() {
             .putExtra(RecordingService.EXTRA_STORAGE_LABEL, storageLabel)
 
         ContextCompat.startForegroundService(this, intent)
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) ProBillingManager.close()
+        super.onDestroy()
     }
 
     private fun stopRecordingService() {
