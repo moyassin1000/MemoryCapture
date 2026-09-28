@@ -67,6 +67,7 @@ class ScreenRecorderEngine(
         customTreeUri: String? = null,
         customStorageLabel: String? = null,
         audioMode: AudioMode = AudioMode.None,
+        preferredMicDeviceId: Int = -1,
     ) {
         check(!started) { "A recording session is already active." }
 
@@ -128,6 +129,7 @@ class ScreenRecorderEngine(
                     audio.start(
                         projection = projection,
                         mode = audioMode,
+                        preferredMicDeviceId = preferredMicDeviceId,
                         sink = object : AudioMuxerSink {
                             override fun onAudioFormat(format: MediaFormat) {
                                 registerTrack(
