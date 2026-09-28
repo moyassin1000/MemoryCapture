@@ -1,6 +1,9 @@
 package com.memorycapture.app.recording
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioPlaybackCaptureConfiguration
@@ -11,6 +14,7 @@ import android.media.MediaFormat
 import android.media.MediaRecorder
 import android.media.projection.MediaProjection
 import android.os.Build
+import androidx.core.content.ContextCompat
 import com.memorycapture.app.data.preferences.AudioMode
 import java.nio.ByteBuffer
 import kotlin.concurrent.thread
@@ -21,6 +25,7 @@ interface AudioMuxerSink {
     fun onAudioSample(buffer: ByteBuffer, info: MediaCodec.BufferInfo)
 }
 
+@SuppressLint("MissingPermission")
 class AudioCaptureEngine(
     private val context: Context,
 ) {
@@ -45,6 +50,14 @@ class AudioCaptureEngine(
     ) {
         if (mode == AudioMode.None) return
         check(!running) { "Audio capture is already active." }
+        check(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO,
+            ) == PackageManager.PERMISSION_GRANTED,
+        ) {
+            "RECORD_AUDIO permission is required for audio recording."
+        }
 
         if (
             (mode == AudioMode.DeviceAudio || mode == AudioMode.DeviceAndMic) &&
