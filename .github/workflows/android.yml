@@ -17,7 +17,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.1'
-      - uses: android-actions/setup-android@v3
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
       - name: Install SDK
         run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
       - name: Generate Gradle wrapper
