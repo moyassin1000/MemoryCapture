@@ -16,13 +16,19 @@ import com.memorycapture.app.projection.MediaProjectionController
 import com.memorycapture.app.recording.RecordingError
 import com.memorycapture.app.recording.RecordingState
 import com.memorycapture.app.recording.RecordingStateStore
+import com.memorycapture.app.recording.SavedRecording
+import com.memorycapture.app.recording.SavedRecordingStore
+import com.memorycapture.app.recording.ScreenRecorderEngine
 
 class RecordingService : Service() {
     private lateinit var projectionController: MediaProjectionController
+    private lateinit var recorderEngine: ScreenRecorderEngine
+    private var intentionalStop = false
 
     override fun onCreate() {
         super.onCreate()
         projectionController = MediaProjectionController(this)
+        recorderEngine = ScreenRecorderEngine(this)
         createNotificationChannel()
     }
 
@@ -50,36 +56,73 @@ class RecordingService : Service() {
         }
 
         startAsForeground()
-        RecordingStateStore.transition(RecordingState.Countdown)
+        intentionalStop = false
 
         runCatching {
-            projectionController.start(resultCode, resultData) {
-                val state = RecordingStateStore.state.value
-                if (state !is RecordingState.Stopping && state !is RecordingState.Completed) {
-                    RecordingStateStore.forceError(RecordingError.RecordingInterrupted)
-                }
-                stopSelf()
+            val projection = projectionController.start(resultCode, resultData) {
+                handleProjectionStopped()
             }
+            recorderEngine.start(projection)
         }.onSuccess {
-            // Phase 1 intentionally acquires a real MediaProjection token but does not
-            // create a VirtualDisplay/encoder yet. That is Phase 2.
             RecordingStateStore.transition(RecordingState.Recording)
         }.onFailure {
-            RecordingStateStore.forceError(RecordingError.UnknownError)
-            stopSelf()
+            recorderEngine.abort()
+            intentionalStop = true
+            projectionController.stop()
+            RecordingStateStore.forceError(RecordingError.EncoderUnavailable)
+            stopForegroundAndSelf()
         }
     }
 
     private fun stopProjectionSession() {
-        if (RecordingStateStore.state.value is RecordingState.Recording ||
-            RecordingStateStore.state.value is RecordingState.Paused
-        ) {
-            RecordingStateStore.transition(RecordingState.Stopping)
+        val state = RecordingStateStore.state.value
+        if (state !is RecordingState.Recording && state !is RecordingState.Paused) {
+            return
         }
+
+        RecordingStateStore.transition(RecordingState.Stopping)
+        RecordingStateStore.transition(RecordingState.Processing)
+
+        val saved = recorderEngine.stopAndSave()
+        intentionalStop = true
         projectionController.stop()
-        RecordingStateStore.transition(RecordingState.Completed)
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        stopSelf()
+
+        if (saved != null) {
+            publishSavedRecording(saved)
+            RecordingStateStore.transition(RecordingState.Completed)
+        } else {
+            RecordingStateStore.forceError(RecordingError.MuxerFailure)
+        }
+
+        stopForegroundAndSelf()
+    }
+
+    private fun handleProjectionStopped() {
+        if (intentionalStop) return
+
+        val current = RecordingStateStore.state.value
+        if (current is RecordingState.Recording || current is RecordingState.Paused) {
+            RecordingStateStore.transition(RecordingState.Stopping)
+            RecordingStateStore.transition(RecordingState.Processing)
+
+            val saved = recorderEngine.stopAndSave()
+            if (saved != null) {
+                publishSavedRecording(saved)
+                RecordingStateStore.transition(RecordingState.Completed)
+            } else {
+                RecordingStateStore.forceError(RecordingError.RecordingInterrupted)
+            }
+        }
+
+        intentionalStop = true
+        stopForegroundAndSelf()
+    }
+
+    private fun publishSavedRecording(saved: SavedRecording) {
+        SavedRecordingStore.setSaved(
+            displayName = saved.displayName,
+            location = saved.locationLabel,
+        )
     }
 
     private fun startAsForeground() {
@@ -126,11 +169,21 @@ class RecordingService : Service() {
         )
     }
 
+    private fun stopForegroundAndSelf() {
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     override fun onDestroy() {
-        projectionController.stop()
-        if (RecordingStateStore.state.value is RecordingState.Recording) {
-            RecordingStateStore.forceError(RecordingError.RecordingInterrupted)
+        if (recorderEngine.isActive()) {
+            val saved = recorderEngine.stopAndSave()
+            if (saved != null) {
+                publishSavedRecording(saved)
+            }
         }
+
+        intentionalStop = true
+        projectionController.stop()
         super.onDestroy()
     }
 
