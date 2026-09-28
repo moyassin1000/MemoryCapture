@@ -1,12 +1,12 @@
 package com.memorycapture.app.ui.recordings
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.util.Size
-import android.net.Uri
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,12 +18,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -32,8 +37,9 @@ import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +69,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.memorycapture.app.R
@@ -102,6 +109,7 @@ fun RecordingsScreen(
     var query by remember { mutableStateOf("") }
     var sort by remember { mutableStateOf(RecordingSort.Newest) }
     var favoritesOnly by remember { mutableStateOf(false) }
+    var gridMode by remember { mutableStateOf(true) }
     var refreshKey by remember { mutableIntStateOf(0) }
     var deleteTarget by remember { mutableStateOf<RecordingItem?>(null) }
     var renameTarget by remember { mutableStateOf<RecordingItem?>(null) }
@@ -201,127 +209,281 @@ fun RecordingsScreen(
                     actions = {
                         IconButton(
                             onClick = {
-                            sort = when (sort) {
-                                RecordingSort.Newest -> RecordingSort.Oldest
-                                RecordingSort.Oldest -> RecordingSort.Largest
-                                RecordingSort.Largest -> RecordingSort.Newest
-                            }
-                        },
+                                gridMode = !gridMode
+                            },
                         ) {
-                            Icon(Icons.Default.Sort, contentDescription = stringResource(R.string.sort))
+                            Icon(
+                                imageVector = if (gridMode) Icons.Default.List else Icons.Default.GridView,
+                                contentDescription = stringResource(
+                                    if (gridMode) R.string.list_view else R.string.grid_view,
+                                ),
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                sort = when (sort) {
+                                    RecordingSort.Newest -> RecordingSort.Oldest
+                                    RecordingSort.Oldest -> RecordingSort.Largest
+                                    RecordingSort.Largest -> RecordingSort.Newest
+                                }
+                            },
+                        ) {
+                            Icon(
+                                Icons.Default.Sort,
+                                contentDescription = stringResource(R.string.sort),
+                            )
                         }
                     },
                 )
             },
         ) { padding ->
             Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null)
-                },
-                label = { Text(stringResource(R.string.search_recordings)) },
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                FilterChip(
-                    selected = !favoritesOnly,
-                    onClick = { favoritesOnly = false },
-                    label = { Text(stringResource(R.string.all_recordings)) },
-                )
-                FilterChip(
-                    selected = favoritesOnly,
-                    onClick = { favoritesOnly = true },
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
                     leadingIcon = {
-                        Icon(Icons.Default.Favorite, contentDescription = null)
+                        Icon(Icons.Default.Search, contentDescription = null)
                     },
-                    label = { Text(stringResource(R.string.favorites)) },
+                    label = { Text(stringResource(R.string.search_recordings)) },
                 )
-            }
 
-            if (filtered.isEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(
-                        imageVector = if (favoritesOnly) Icons.Default.FavoriteBorder else Icons.Default.VideoLibrary,
-                        contentDescription = null,
-                        modifier = Modifier.size(72.dp),
-                        tint = MaterialTheme.colorScheme.primary,
+                    FilterChip(
+                        selected = !favoritesOnly,
+                        onClick = { favoritesOnly = false },
+                        label = { Text(stringResource(R.string.all_recordings)) },
                     )
-                    Text(
-                        text = stringResource(
-                            if (favoritesOnly) R.string.no_favorites_yet else R.string.no_recordings_yet,
-                        ),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 16.dp),
+                    FilterChip(
+                        selected = favoritesOnly,
+                        onClick = { favoritesOnly = true },
+                        leadingIcon = {
+                            Icon(Icons.Default.Favorite, contentDescription = null)
+                        },
+                        label = { Text(stringResource(R.string.favorites)) },
                     )
-                    Text(
-                        text = stringResource(
-                            if (favoritesOnly) R.string.no_favorites_body else R.string.no_recordings_body,
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 6.dp, bottom = 18.dp),
+                }
+
+                if (filtered.isEmpty()) {
+                    EmptyLibrary(
+                        favoritesOnly = favoritesOnly,
+                        onGoToCapture = onGoToCapture,
                     )
-                    if (!favoritesOnly) {
-                        Button(onClick = onGoToCapture) {
-                            Text(stringResource(R.string.start_recording))
+                } else if (gridMode) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(
+                            items = filtered,
+                            key = { it.uri },
+                        ) { item ->
+                            RecordingGridCard(
+                                item = item,
+                                favorite = item.uri in favorites,
+                                onFavorite = {
+                                    scope.launch {
+                                        preferences.toggleFavoriteRecording(item.uri)
+                                    }
+                                },
+                                onOpen = { onOpenDetails(item.uri) },
+                                onPlay = { openVideo(context, item.uri) },
+                            )
                         }
                     }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(
-                        items = filtered,
-                        key = { it.uri },
-                    ) { item ->
-                        RecordingCard(
-                            item = item,
-                            favorite = item.uri in favorites,
-                            onFavorite = {
-                                scope.launch {
-                                    preferences.toggleFavoriteRecording(item.uri)
-                                }
-                            },
-                            onPlay = { openVideo(context, item.uri) },
-                            onShare = { shareVideo(context, item.uri) },
-                            onRename = {
-                                renameText = item.displayName.removeSuffix(".mp4")
-                                renameTarget = item
-                            },
-                            onDelete = { deleteTarget = item },
-                            onDetails = { onOpenDetails(item.uri) },
-                        )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(
+                            items = filtered,
+                            key = { it.uri },
+                        ) { item ->
+                            RecordingListCard(
+                                item = item,
+                                favorite = item.uri in favorites,
+                                onFavorite = {
+                                    scope.launch {
+                                        preferences.toggleFavoriteRecording(item.uri)
+                                    }
+                                },
+                                onPlay = { openVideo(context, item.uri) },
+                                onShare = { shareVideo(context, item.uri) },
+                                onRename = {
+                                    renameText = item.displayName.removeSuffix(".mp4")
+                                    renameTarget = item
+                                },
+                                onDelete = { deleteTarget = item },
+                                onDetails = { onOpenDetails(item.uri) },
+                            )
+                        }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun EmptyLibrary(
+    favoritesOnly: Boolean,
+    onGoToCapture: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 80.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            imageVector = if (favoritesOnly) Icons.Default.FavoriteBorder else Icons.Default.VideoLibrary,
+            contentDescription = null,
+            modifier = Modifier.size(72.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = stringResource(
+                if (favoritesOnly) R.string.no_favorites_yet else R.string.no_recordings_yet,
+            ),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
+            modifier = Modifier.padding(top = 16.dp),
+        )
+        Text(
+            text = stringResource(
+                if (favoritesOnly) R.string.no_favorites_body else R.string.no_recordings_body,
+            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp, bottom = 18.dp),
+        )
+        if (!favoritesOnly) {
+            Button(onClick = onGoToCapture) {
+                Text(stringResource(R.string.start_recording))
+            }
+        }
     }
 }
 
 @Composable
-private fun RecordingCard(
+private fun RecordingGridCard(
+    item: RecordingItem,
+    favorite: Boolean,
+    onFavorite: () -> Unit,
+    onOpen: () -> Unit,
+    onPlay: () -> Unit,
+) {
+    val thumbnail = rememberVideoThumbnail(item.uri)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(8.dp, MaterialTheme.shapes.medium)
+            .clickable(onClick = onOpen),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        ),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Box {
+                if (thumbnail != null) {
+                    Image(
+                        bitmap = thumbnail,
+                        contentDescription = item.displayName,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(118.dp)
+                            .clip(MaterialTheme.shapes.medium)
+                            .clickable(onClick = onPlay),
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(118.dp)
+                            .background(
+                                MaterialTheme.colorScheme.primaryContainer,
+                                MaterialTheme.shapes.medium,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Default.VideoLibrary,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.Black.copy(alpha = 0.62f),
+                    ),
+                ) {
+                    Text(
+                        text = formatDuration(item.durationMillis),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.padding(start = 12.dp, end = 6.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.displayName,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = formatSize(item.sizeBytes),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onFavorite) {
+                    Icon(
+                        imageVector = if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = stringResource(
+                            if (favorite) R.string.remove_from_favorites else R.string.add_to_favorites,
+                        ),
+                        tint = if (favorite) {
+                            MaterialTheme.colorScheme.tertiary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordingListCard(
     item: RecordingItem,
     favorite: Boolean,
     onFavorite: () -> Unit,
@@ -337,10 +499,11 @@ private fun RecordingCard(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(8.dp, MaterialTheme.shapes.medium),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        ),
     ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (thumbnail != null) {
                 Image(
                     bitmap = thumbnail,
@@ -352,43 +515,18 @@ private fun RecordingCard(
                         .clip(MaterialTheme.shapes.medium)
                         .clickable(onClick = onPlay),
                 )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(126.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primaryContainer,
-                            MaterialTheme.shapes.medium,
-                        )
-                        .clickable(onClick = onPlay),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.VideoLibrary,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(42.dp),
-                    )
-                }
             }
 
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp),
-
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = Icons.Default.VideoLibrary,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = item.displayName,
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                     )
                     Text(
                         text = formatDuration(item.durationMillis) + " • " + formatSize(item.sizeBytes),
@@ -410,7 +548,6 @@ private fun RecordingCard(
                         contentDescription = stringResource(
                             if (favorite) R.string.remove_from_favorites else R.string.add_to_favorites,
                         ),
-                        tint = if (favorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -447,7 +584,6 @@ private fun RecordingCard(
         }
     }
 }
-
 
 @Composable
 private fun rememberVideoThumbnail(uriString: String): ImageBitmap? {
