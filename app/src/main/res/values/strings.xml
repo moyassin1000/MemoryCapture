@@ -42,11 +42,14 @@
     <string name="notification_text">Your screen video is being recorded.</string>
     <string name="notification_stop">Stop</string>
     <string name="settings_title">Settings</string>
-    <string name="settings_privacy_title">Privacy first</string>
-    <string name="settings_privacy_body">Recordings stay local by default. MemoryCapture never starts a hidden recording and respects protected windows.</string>
-    <string name="settings_language_title">Languages</string>
-    <string name="settings_language_body">English and Arabic are supported.</string>
-    <string name="settings_phase_title">Screen recording build</string>
-    <string name="settings_phase_body">Screen recording is saved as MP4 in Movies/MemoryCapture. Audio capture is added separately so video saving remains stable.</string>
+    <string name="settings_privacy_title">Privacy</string>
+    <string name="settings_privacy_body">Recordings stay local by default and protected windows remain protected.</string>
+    <string name="settings_language_title">Language</string>
+    <string name="settings_recording_title">Recording</string>
+    <string name="settings_recording_body">Screen recordings are saved locally in Movies/MemoryCapture.</string>
+    <string name="choose_language">Choose language</string>
+    <string name="language_arabic">العربية</string>
+    <string name="language_english">English</string>
+    <string name="cancel">Cancel</string>
     <string name="back">Back</string>
 </resources>
