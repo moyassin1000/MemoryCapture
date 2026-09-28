@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.memorycapture.app.R
 import com.memorycapture.app.billing.ProBillingManager
 import com.memorycapture.app.data.preferences.AppPreferences
+import com.memorycapture.app.data.preferences.AudioMode
 import com.memorycapture.app.data.recordings.RecordingRepository
 import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.RecordingSessionStore
@@ -75,6 +76,7 @@ fun HomeScreen(
     val preferences = remember { AppPreferences(context.applicationContext) }
 
     val storageTreeUri by preferences.storageTreeUri.collectAsStateWithLifecycle(initialValue = null)
+    val audioMode by preferences.audioMode.collectAsStateWithLifecycle(initialValue = AudioMode.DeviceAndMic)
     val storageLabel by preferences.storageLabel.collectAsStateWithLifecycle(initialValue = null)
     val state by RecordingStateStore.state.collectAsStateWithLifecycle()
     val proState by ProBillingManager.state.collectAsStateWithLifecycle()
@@ -231,7 +233,7 @@ fun HomeScreen(
                                     ProfileMetric("1080p", stringResource(R.string.quality))
                                     ProfileMetric("30", stringResource(R.string.frame_rate))
                                     ProfileMetric(
-                                        stringResource(R.string.no_audio),
+                                        homeAudioLabel(audioMode),
                                         stringResource(R.string.audio),
                                     )
                                 }
@@ -467,3 +469,13 @@ private fun formatStorage(bytes: Long): String {
         String.format(java.util.Locale.US, "%.0f MB", mb)
     }
 }
+
+
+@Composable
+private fun homeAudioLabel(mode: AudioMode): String =
+    when (mode) {
+        AudioMode.None -> stringResource(R.string.audio_mode_off)
+        AudioMode.Microphone -> stringResource(R.string.audio_mode_mic)
+        AudioMode.DeviceAudio -> stringResource(R.string.audio_mode_device)
+        AudioMode.DeviceAndMic -> stringResource(R.string.audio_mode_both)
+    }
