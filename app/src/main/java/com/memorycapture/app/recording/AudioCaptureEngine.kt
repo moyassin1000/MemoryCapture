@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioRecord
 import android.media.MediaCodec
@@ -47,6 +48,7 @@ class AudioCaptureEngine(
     fun start(
         projection: MediaProjection,
         mode: AudioMode,
+        preferredMicDeviceId: Int = -1,
         sink: AudioMuxerSink,
     ) {
         if (mode == AudioMode.None) return
@@ -93,6 +95,10 @@ class AudioCaptureEngine(
                     check(it.state == AudioRecord.STATE_INITIALIZED) {
                         "Unable to initialize microphone capture."
                     }
+                    applyPreferredMicrophoneDevice(
+                        record = it,
+                        deviceId = preferredMicDeviceId,
+                    )
                 }
         } else {
             null
@@ -441,6 +447,23 @@ class AudioCaptureEngine(
         }
 
         return bytes
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun applyPreferredMicrophoneDevice(
+        record: AudioRecord,
+        deviceId: Int,
+    ) {
+        if (deviceId < 0) return
+
+        val audioManager = context.getSystemService(AudioManager::class.java)
+        val device = audioManager
+            .getDevices(AudioManager.GET_DEVICES_INPUTS)
+            .firstOrNull { it.id == deviceId }
+
+        if (device != null) {
+            runCatching { record.setPreferredDevice(device) }
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
