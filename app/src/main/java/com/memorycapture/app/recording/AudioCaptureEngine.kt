@@ -234,7 +234,7 @@ class AudioCaptureEngine(
                 )
             }
 
-            queueEndOfStream(activeEncoder)
+            queueEndOfStream(activeEncoder, sink)
             drainEncoder(
                 codec = activeEncoder,
                 sink = sink,
@@ -293,7 +293,10 @@ class AudioCaptureEngine(
         }
     }
 
-    private fun queueEndOfStream(codec: MediaCodec) {
+    private fun queueEndOfStream(
+        codec: MediaCodec,
+        sink: AudioMuxerSink,
+    ) {
         repeat(EOS_QUEUE_RETRIES) {
             val inputIndex = codec.dequeueInputBuffer(CODEC_TIMEOUT_US)
             if (inputIndex >= 0) {
@@ -307,7 +310,9 @@ class AudioCaptureEngine(
                 )
                 return
             }
+            drainEncoder(codec, sink, waitForEos = false)
         }
+        error("Unable to queue AAC end-of-stream.")
     }
 
     private fun drainEncoder(
