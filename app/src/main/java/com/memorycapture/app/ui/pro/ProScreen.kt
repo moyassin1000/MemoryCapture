@@ -16,6 +16,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Verified
@@ -238,6 +240,46 @@ fun ProScreen(
 
                 item {
                     Text(
+                        stringResource(R.string.pro_compare_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                    )
+                }
+
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(10.dp, MaterialTheme.shapes.large),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                        ),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(18.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            ProComparisonRow(
+                                title = stringResource(R.string.pro_compare_core),
+                                freeIncluded = true,
+                                proIncluded = true,
+                            )
+                            ProComparisonRow(
+                                title = stringResource(R.string.pro_compare_themes),
+                                freeIncluded = false,
+                                proIncluded = true,
+                            )
+                            ProComparisonRow(
+                                title = stringResource(R.string.pro_compare_insights),
+                                freeIncluded = false,
+                                proIncluded = true,
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Text(
                         stringResource(R.string.pro_features),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Black,
@@ -367,6 +409,42 @@ fun ProScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ProComparisonRow(
+    title: String,
+    freeIncluded: Boolean,
+    proIncluded: Boolean,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            fontWeight = FontWeight.SemiBold,
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Icon(
+                imageVector = if (freeIncluded) Icons.Default.CheckCircle else Icons.Default.Lock,
+                contentDescription = stringResource(R.string.pro_compare_free),
+                tint = if (freeIncluded) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Icon(
+                imageVector = if (proIncluded) Icons.Default.CheckCircle else Icons.Default.Lock,
+                contentDescription = stringResource(R.string.pro_compare_pro),
+                tint = MaterialTheme.colorScheme.tertiary,
+            )
         }
     }
 }
