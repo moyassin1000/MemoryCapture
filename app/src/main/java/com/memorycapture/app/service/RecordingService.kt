@@ -13,6 +13,7 @@ import androidx.core.app.ServiceCompat
 import com.memorycapture.app.MainActivity
 import com.memorycapture.app.R
 import com.memorycapture.app.projection.MediaProjectionController
+import com.memorycapture.app.recording.RecorderDiagnosticsStore
 import com.memorycapture.app.recording.RecordingError
 import com.memorycapture.app.recording.RecordingSessionStore
 import com.memorycapture.app.recording.RecordingState
@@ -60,9 +61,23 @@ class RecordingService : Service() {
         intentionalStop = false
 
         runCatching {
-            val projection = projectionController.start(resultCode, resultData) {
-                handleProjectionStopped()
-            }
+            val projection = projectionController.start(
+                resultCode = resultCode,
+                data = resultData,
+                onStopped = { handleProjectionStopped() },
+                onVisibilityChanged = { visible ->
+                    RecorderDiagnosticsStore.setCaptureVisible(visible)
+                    if (!visible) {
+                        RecorderDiagnosticsStore.warning(
+                            "Captured content is no longer visible. If you selected one app, return to it or choose Entire screen on the next recording.",
+                        )
+                    }
+                },
+                onContentResized = { width, height ->
+                    RecorderDiagnosticsStore.setCapturedContentSize(width, height)
+                },
+            )
+
             recorderEngine.start(
                 projection = projection,
                 customTreeUri = intent.getStringExtra(EXTRA_STORAGE_TREE_URI),
@@ -71,11 +86,12 @@ class RecordingService : Service() {
         }.onSuccess {
             RecordingSessionStore.markStarted()
             RecordingStateStore.transition(RecordingState.Recording)
-        }.onFailure {
+        }.onFailure { error ->
             recorderEngine.abort()
             RecordingSessionStore.clear()
             intentionalStop = true
             projectionController.stop()
+            RecorderDiagnosticsStore.error(error.message ?: "Unable to start recording.")
             RecordingStateStore.forceError(RecordingError.EncoderUnavailable)
             stopForegroundAndSelf()
         }
@@ -113,6 +129,7 @@ class RecordingService : Service() {
 
             val saved = recorderEngine.stopAndSave()
             RecordingSessionStore.clear()
+
             if (saved != null) {
                 publishSavedRecording(saved)
                 RecordingStateStore.transition(RecordingState.Completed)
@@ -139,6 +156,7 @@ class RecordingService : Service() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+
         val stopIntent = PendingIntent.getService(
             this,
             1,
@@ -164,8 +182,7 @@ class RecordingService : Service() {
     }
 
     private fun createNotificationChannel() {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
+        getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
                 getString(R.string.notification_channel_name),
