@@ -11,7 +11,13 @@ class MediaProjectionController(context: Context) {
     private val manager = context.getSystemService(MediaProjectionManager::class.java)
     private var projection: MediaProjection? = null
 
-    fun start(resultCode: Int, data: Intent, onStopped: () -> Unit): MediaProjection {
+    fun start(
+        resultCode: Int,
+        data: Intent,
+        onStopped: () -> Unit,
+        onVisibilityChanged: (Boolean) -> Unit = {},
+        onContentResized: (Int, Int) -> Unit = { _, _ -> },
+    ): MediaProjection {
         stop()
 
         val created = requireNotNull(manager.getMediaProjection(resultCode, data)) {
@@ -23,6 +29,14 @@ class MediaProjectionController(context: Context) {
                 override fun onStop() {
                     projection = null
                     onStopped()
+                }
+
+                override fun onCapturedContentVisibilityChanged(isVisible: Boolean) {
+                    onVisibilityChanged(isVisible)
+                }
+
+                override fun onCapturedContentResize(width: Int, height: Int) {
+                    onContentResized(width, height)
                 }
             },
             Handler(Looper.getMainLooper()),
