@@ -224,7 +224,7 @@ class AudioCaptureEngine(
                         AudioMode.DeviceAndMic -> mixedBuffer
                         AudioMode.None -> mixedBuffer
                     }
-                    queuePcm(activeEncoder, source, bytes)
+                    queuePcm(activeEncoder, source, bytes, sink)
                 }
 
                 drainEncoder(
@@ -259,12 +259,13 @@ class AudioCaptureEngine(
         codec: MediaCodec,
         source: ByteArray,
         byteCount: Int,
+        sink: AudioMuxerSink,
     ) {
         var offset = 0
         while (offset < byteCount && running) {
             val inputIndex = codec.dequeueInputBuffer(CODEC_TIMEOUT_US)
             if (inputIndex < 0) {
-                drainEncoder(codec, NoOpSink, waitForEos = false)
+                drainEncoder(codec, sink, waitForEos = false)
                 continue
             }
 
@@ -435,14 +436,6 @@ class AudioCaptureEngine(
         microphoneRecord = null
         playbackRecord = null
         worker = null
-    }
-
-    private object NoOpSink : AudioMuxerSink {
-        override fun onAudioFormat(format: MediaFormat) = Unit
-        override fun onAudioSample(
-            buffer: ByteBuffer,
-            info: MediaCodec.BufferInfo,
-        ) = Unit
     }
 
     companion object {
