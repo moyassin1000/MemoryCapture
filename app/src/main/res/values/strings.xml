@@ -92,7 +92,7 @@
     <string name="seconds_10">10 seconds</string>
     <string name="disabled">Disabled</string>
     <string name="storage_section">Storage</string>
-    <string name="available_storage">Available storage</string>
+    <string name="available_storage">Available storage</string>\n    <string name="open_recordings_folder">Open recordings folder</string>\n    <string name="recording_count">Number of recordings</string>\n    <string name="used_storage">Used storage</string>
     <string name="restore_default_storage">Use default folder</string>
     <string name="appearance_section">Appearance &amp; language</string>
     <string name="appearance">Appearance</string>
