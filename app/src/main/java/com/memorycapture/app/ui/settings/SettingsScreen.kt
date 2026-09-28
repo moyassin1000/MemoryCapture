@@ -1,6 +1,7 @@
 package com.memorycapture.app.ui.settings
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Environment
 import android.os.StatFs
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -16,9 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AllInclusive
-import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Info
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,7 +45,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -62,6 +66,7 @@ import com.memorycapture.app.BuildConfig
 import com.memorycapture.app.R
 import com.memorycapture.app.data.preferences.AppPreferences
 import com.memorycapture.app.data.preferences.ThemeMode
+import com.memorycapture.app.data.recordings.RecordingRepository
 import com.memorycapture.app.recording.RecordingState
 import com.memorycapture.app.recording.RecordingStateStore
 import kotlinx.coroutines.launch
@@ -74,6 +79,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val preferences = remember { AppPreferences(context.applicationContext) }
+    val recordingRepository = remember { RecordingRepository(context.applicationContext) }
     val scope = rememberCoroutineScope()
     val configuration = LocalConfiguration.current
     val currentLanguage = configuration.locales[0]?.language ?: "en"
@@ -81,6 +87,7 @@ fun SettingsScreen(
     val themeMode by preferences.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.System)
     val countdownEnabled by preferences.countdownEnabled.collectAsStateWithLifecycle(initialValue = true)
     val countdownSeconds by preferences.countdownSeconds.collectAsStateWithLifecycle(initialValue = 3)
+    val storageTreeUri by preferences.storageTreeUri.collectAsStateWithLifecycle(initialValue = null)
     val storageLabel by preferences.storageLabel.collectAsStateWithLifecycle(initialValue = null)
     val updateNotifications by preferences.updateNotificationsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val recordingState by RecordingStateStore.state.collectAsStateWithLifecycle()
@@ -90,6 +97,14 @@ fun SettingsScreen(
     var showCountdownDialog by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
     var showActiveRecordingWarning by remember { mutableStateOf(false) }
+    var recordingCount by remember { mutableStateOf(0) }
+    var usedStorageBytes by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(storageTreeUri) {
+        val items = recordingRepository.loadRecordings(storageTreeUri)
+        recordingCount = items.size
+        usedStorageBytes = items.sumOf { it.sizeBytes }
+    }
 
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
@@ -107,6 +122,10 @@ fun SettingsScreen(
             }
         }
     }
+
+    val folderBrowser = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { }
 
     if (showLanguageDialog) {
         ChoiceDialog(
@@ -199,9 +218,7 @@ fun SettingsScreen(
     }
 
     val statFs = remember { StatFs(Environment.getDataDirectory().absolutePath) }
-    val availableStorage = remember {
-        formatStorage(statFs.availableBytes)
-    }
+    val availableStorage = remember { formatStorage(statFs.availableBytes) }
 
     Scaffold(
         topBar = {
@@ -293,7 +310,34 @@ fun SettingsScreen(
                     icon = Icons.Default.Folder,
                     title = stringResource(R.string.storage_location),
                     subtitle = storageLabel ?: stringResource(R.string.default_storage),
-                    onClick = { folderPicker.launch(null) },
+                    onClick = { folderPicker.launch(storageTreeUri?.let(Uri::parse)) },
+                )
+            }
+
+            item {
+                SettingsRow(
+                    icon = Icons.Default.FolderOpen,
+                    title = stringResource(R.string.open_recordings_folder),
+                    subtitle = storageLabel ?: stringResource(R.string.default_storage),
+                    onClick = {
+                        folderBrowser.launch(storageTreeUri?.let(Uri::parse))
+                    },
+                )
+            }
+
+            item {
+                SettingsRow(
+                    icon = Icons.Default.VideoLibrary,
+                    title = stringResource(R.string.recording_count),
+                    subtitle = recordingCount.toString(),
+                )
+            }
+
+            item {
+                SettingsRow(
+                    icon = Icons.Default.Storage,
+                    title = stringResource(R.string.used_storage),
+                    subtitle = formatStorage(usedStorageBytes),
                 )
             }
 
@@ -387,7 +431,7 @@ fun SettingsScreen(
 
             item {
                 SettingsRow(
-                    icon = Icons.Default.DarkMode,
+                    icon = Icons.Default.ExitToApp,
                     title = stringResource(R.string.exit_app),
                     subtitle = stringResource(R.string.exit_app_subtitle),
                     onClick = {
@@ -559,6 +603,12 @@ private fun ChoiceDialog(
 }
 
 private fun formatStorage(bytes: Long): String {
+    if (bytes <= 0L) return "0 MB"
     val gb = bytes / 1024.0 / 1024.0 / 1024.0
-    return String.format(java.util.Locale.US, "%.1f GB", gb)
+    return if (gb >= 1.0) {
+        String.format(java.util.Locale.US, "%.1f GB", gb)
+    } else {
+        val mb = bytes / 1024.0 / 1024.0
+        String.format(java.util.Locale.US, "%.0f MB", mb)
+    }
 }
