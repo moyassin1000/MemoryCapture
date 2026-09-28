@@ -58,6 +58,8 @@ class ScreenRecorderEngine(
     private var audioTrackIndex = -1
     private var expectedTrackCount = 1
     private var pendingBytes = 0
+    private var firstVideoPtsUs = -1L
+    private var firstAudioPtsUs = -1L
     private var started = false
 
     fun start(
@@ -411,12 +413,22 @@ class ScreenRecorderEngine(
         if (info.size <= 0) return
 
         synchronized(muxerLock) {
+            val normalizedPts = normalizedPresentationTime(kind, info.presentationTimeUs)
+
             if (muxerStarted) {
                 val trackIndex = trackIndex(kind)
                 check(trackIndex >= 0) {
                     "Encoded sample arrived before its muxer track was registered."
                 }
-                activeMuxer.writeSampleData(trackIndex, buffer, info)
+                val adjusted = MediaCodec.BufferInfo().apply {
+                    set(
+                        info.offset,
+                        info.size,
+                        normalizedPts,
+                        info.flags,
+                    )
+                }
+                activeMuxer.writeSampleData(trackIndex, buffer, adjusted)
                 return
             }
 
@@ -436,7 +448,7 @@ class ScreenRecorderEngine(
                 PendingSample(
                     kind = kind,
                     data = copy,
-                    presentationTimeUs = info.presentationTimeUs,
+                    presentationTimeUs = normalizedPts,
                     flags = info.flags,
                 ),
             )
@@ -469,6 +481,23 @@ class ScreenRecorderEngine(
             TrackKind.Audio -> audioTrackIndex
         }
 
+    private fun normalizedPresentationTime(
+        kind: TrackKind,
+        presentationTimeUs: Long,
+    ): Long {
+        val first = when (kind) {
+            TrackKind.Video -> {
+                if (firstVideoPtsUs < 0L) firstVideoPtsUs = presentationTimeUs
+                firstVideoPtsUs
+            }
+            TrackKind.Audio -> {
+                if (firstAudioPtsUs < 0L) firstAudioPtsUs = presentationTimeUs
+                firstAudioPtsUs
+            }
+        }
+        return (presentationTimeUs - first).coerceAtLeast(0L)
+    }
+
     private fun resetMuxerState(trackCount: Int) {
         synchronized(muxerLock) {
             expectedTrackCount = trackCount
@@ -477,6 +506,8 @@ class ScreenRecorderEngine(
             muxerStarted = false
             pendingSamples.clear()
             pendingBytes = 0
+            firstVideoPtsUs = -1L
+            firstAudioPtsUs = -1L
         }
     }
 
