@@ -7,9 +7,9 @@ import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.memorycapture.app.navigation.MemoryCaptureNavHost
@@ -23,7 +23,7 @@ import com.memorycapture.app.ui.theme.MemoryCaptureTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     private val projectionManager by lazy {
         getSystemService(MediaProjectionManager::class.java)
     }
