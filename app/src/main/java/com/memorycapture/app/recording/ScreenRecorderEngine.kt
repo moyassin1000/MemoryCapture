@@ -6,6 +6,7 @@ import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.media.MediaScannerConnection
@@ -22,6 +23,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.concurrent.thread
+import kotlin.math.max
 
 data class SavedRecording(
     val displayName: String,
@@ -39,14 +41,10 @@ class ScreenRecorderEngine(
     private var outputHandle: OutputHandle? = null
     private var drainThread: Thread? = null
 
-    @Volatile
-    private var drainFailure: Throwable? = null
-
-    @Volatile
-    private var muxerStarted = false
-
-    @Volatile
-    private var abortDrain = false
+    @Volatile private var drainFailure: Throwable? = null
+    @Volatile private var muxerStarted = false
+    @Volatile private var abortDrain = false
+    @Volatile private var encodedFrames = 0L
 
     private var started = false
 
@@ -57,8 +55,10 @@ class ScreenRecorderEngine(
     ) {
         check(!started) { "A recording session is already active." }
 
+        RecorderDiagnosticsStore.reset()
+
         val metrics = context.resources.displayMetrics
-        val (width, height) = scaledEvenSize(metrics.widthPixels, metrics.heightPixels)
+        val candidate = chooseEncoder(metrics.widthPixels, metrics.heightPixels)
         val output = createOutput(customTreeUri, customStorageLabel)
 
         var localEncoder: MediaCodec? = null
@@ -67,34 +67,32 @@ class ScreenRecorderEngine(
         var localDisplay: VirtualDisplay? = null
 
         try {
-            val format = MediaFormat.createVideoFormat(MIME_TYPE, width, height).apply {
+            val format = MediaFormat.createVideoFormat(
+                MIME_TYPE,
+                candidate.width,
+                candidate.height,
+            ).apply {
                 setInteger(
                     MediaFormat.KEY_COLOR_FORMAT,
                     MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface,
                 )
-                setInteger(MediaFormat.KEY_BIT_RATE, VIDEO_BIT_RATE)
+                setInteger(MediaFormat.KEY_BIT_RATE, candidate.bitRate)
                 setInteger(MediaFormat.KEY_FRAME_RATE, VIDEO_FRAME_RATE)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL_SECONDS)
             }
 
-            localEncoder = MediaCodec.createEncoderByType(MIME_TYPE).apply {
-                configure(
-                    format,
-                    null,
-                    null,
-                    MediaCodec.CONFIGURE_FLAG_ENCODE,
-                )
+            localEncoder = MediaCodec.createByCodecName(candidate.codecName).apply {
+                configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             }
 
             localSurface = localEncoder.createInputSurface()
             localMuxer = createMuxer(output)
-
             localEncoder.start()
 
             localDisplay = projection.createVirtualDisplay(
                 "MemoryCapture",
-                width,
-                height,
+                candidate.width,
+                candidate.height,
                 metrics.densityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 localSurface,
@@ -111,7 +109,16 @@ class ScreenRecorderEngine(
             drainFailure = null
             muxerStarted = false
             abortDrain = false
+            encodedFrames = 0L
             started = true
+
+            RecorderDiagnosticsStore.starting(
+                codecName = candidate.codecName,
+                width = candidate.width,
+                height = candidate.height,
+                frameRate = VIDEO_FRAME_RATE,
+                bitRate = candidate.bitRate,
+            )
 
             drainThread = thread(
                 start = true,
@@ -120,13 +127,14 @@ class ScreenRecorderEngine(
                 drainEncoder(localEncoder, localMuxer)
             }
         } catch (error: Throwable) {
+            RecorderDiagnosticsStore.error(error.message ?: "Unable to start video encoder")
             runCatching { localDisplay?.release() }
             runCatching { localSurface?.release() }
             runCatching { localEncoder?.stop() }
             runCatching { localEncoder?.release() }
             runCatching { localMuxer?.release() }
             cleanupFailedOutput(output)
-            clearRuntimeState()
+            clearRuntimeState(resetDiagnostics = false)
             throw error
         }
     }
@@ -142,17 +150,14 @@ class ScreenRecorderEngine(
         val activeDrainThread = drainThread
 
         started = false
-
         var stoppedCleanly = true
 
         try {
-            runCatching { activeDisplay?.release() }
-                .onFailure { stoppedCleanly = false }
+            runCatching { activeDisplay?.release() }.onFailure { stoppedCleanly = false }
 
-            val signaled = runCatching {
-                activeEncoder?.signalEndOfInputStream()
-            }.isSuccess
-            if (!signaled) stoppedCleanly = false
+            if (runCatching { activeEncoder?.signalEndOfInputStream() }.isFailure) {
+                stoppedCleanly = false
+            }
 
             activeDrainThread?.join(DRAIN_JOIN_TIMEOUT_MS)
 
@@ -162,7 +167,7 @@ class ScreenRecorderEngine(
                 stoppedCleanly = false
             }
 
-            if (drainFailure != null) {
+            if (drainFailure != null || encodedFrames < MIN_VALID_FRAMES) {
                 stoppedCleanly = false
             }
         } catch (_: InterruptedException) {
@@ -170,33 +175,37 @@ class ScreenRecorderEngine(
             stoppedCleanly = false
         } finally {
             abortDrain = true
-
-            runCatching { activeEncoder?.stop() }
-                .onFailure { stoppedCleanly = false }
+            runCatching { activeEncoder?.stop() }.onFailure { stoppedCleanly = false }
             runCatching { activeEncoder?.release() }
             runCatching { activeSurface?.release() }
 
             if (muxerStarted) {
-                runCatching { activeMuxer?.stop() }
-                    .onFailure { stoppedCleanly = false }
+                runCatching { activeMuxer?.stop() }.onFailure { stoppedCleanly = false }
             } else {
                 stoppedCleanly = false
             }
 
             runCatching { activeMuxer?.release() }
             runCatching { output?.fileDescriptor?.close() }
-
-            clearRuntimeState()
+            clearRuntimeState(resetDiagnostics = false)
         }
 
         if (output == null) return null
 
         if (!stoppedCleanly) {
+            RecorderDiagnosticsStore.error(
+                if (encodedFrames < MIN_VALID_FRAMES) {
+                    "Too few video frames were encoded."
+                } else {
+                    drainFailure?.message ?: "Video finalization failed."
+                },
+            )
             cleanupFailedOutput(output)
             return null
         }
 
         finalizeOutput(output)
+        RecorderDiagnosticsStore.stopped()
 
         return SavedRecording(
             displayName = output.displayName,
@@ -215,7 +224,6 @@ class ScreenRecorderEngine(
 
         started = false
         abortDrain = true
-
         runCatching { activeDisplay?.release() }
 
         try {
@@ -227,21 +235,75 @@ class ScreenRecorderEngine(
         runCatching { activeEncoder?.stop() }
         runCatching { activeEncoder?.release() }
         runCatching { activeSurface?.release() }
-
-        if (muxerStarted) {
-            runCatching { activeMuxer?.stop() }
-        }
+        if (muxerStarted) runCatching { activeMuxer?.stop() }
         runCatching { activeMuxer?.release() }
         runCatching { output?.fileDescriptor?.close() }
 
-        if (output != null) {
-            cleanupFailedOutput(output)
-        }
-
-        clearRuntimeState()
+        if (output != null) cleanupFailedOutput(output)
+        clearRuntimeState(resetDiagnostics = false)
     }
 
     fun isActive(): Boolean = started
+
+    private fun chooseEncoder(sourceWidth: Int, sourceHeight: Int): EncoderCandidate {
+        val codecInfos = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+            .codecInfos
+            .filter { info ->
+                info.isEncoder && info.supportedTypes.any { it.equals(MIME_TYPE, ignoreCase = true) }
+            }
+            .sortedWith(
+                compareByDescending<MediaCodecInfo> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) it.isHardwareAccelerated else true
+                }.thenBy { it.name },
+            )
+
+        val requestedSizes = listOf(1920, 1600, 1280, 960)
+
+        for (maxLongEdge in requestedSizes) {
+            val (baseWidth, baseHeight) = scaledSize(
+                sourceWidth,
+                sourceHeight,
+                maxLongEdge,
+            )
+
+            for (info in codecInfos) {
+                val capabilities = runCatching {
+                    info.getCapabilitiesForType(MIME_TYPE)
+                }.getOrNull() ?: continue
+
+                if (
+                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface !in
+                    capabilities.colorFormats
+                ) {
+                    continue
+                }
+
+                val video = capabilities.videoCapabilities ?: continue
+                val width = alignDown(baseWidth, video.widthAlignment)
+                val height = alignDown(baseHeight, video.heightAlignment)
+
+                val supported = runCatching {
+                    video.isSizeSupported(width, height) &&
+                        video.areSizeAndRateSupported(
+                            width,
+                            height,
+                            VIDEO_FRAME_RATE.toDouble(),
+                        )
+                }.getOrDefault(false)
+
+                if (!supported) continue
+
+                return EncoderCandidate(
+                    codecName = info.name,
+                    width = width,
+                    height = height,
+                    bitRate = calculateBitRate(width, height),
+                )
+            }
+        }
+
+        error("No compatible H.264 screen encoder was found on this device.")
+    }
 
     private fun drainEncoder(
         codec: MediaCodec,
@@ -252,17 +314,18 @@ class ScreenRecorderEngine(
 
         try {
             while (!abortDrain) {
-                when (val outputBufferIndex = codec.dequeueOutputBuffer(
-                    bufferInfo,
-                    DEQUEUE_TIMEOUT_US,
-                )) {
+                when (
+                    val outputBufferIndex = codec.dequeueOutputBuffer(
+                        bufferInfo,
+                        DEQUEUE_TIMEOUT_US,
+                    )
+                ) {
                     MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
 
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         check(!muxerStarted) {
                             "The video encoder output format changed more than once."
                         }
-
                         videoTrackIndex = activeMuxer.addTrack(codec.outputFormat)
                         activeMuxer.start()
                         muxerStarted = true
@@ -274,30 +337,37 @@ class ScreenRecorderEngine(
                                 ?: error("Video encoder returned a null output buffer.")
 
                             if (
-                                bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
+                                bufferInfo.flags and
+                                MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
                             ) {
                                 bufferInfo.size = 0
                             }
 
                             if (bufferInfo.size > 0) {
                                 check(muxerStarted && videoTrackIndex >= 0) {
-                                    "Received encoded video before MediaMuxer was ready."
+                                    "Encoded video arrived before MediaMuxer was ready."
                                 }
 
                                 encodedData.position(bufferInfo.offset)
                                 encodedData.limit(bufferInfo.offset + bufferInfo.size)
-
                                 activeMuxer.writeSampleData(
                                     videoTrackIndex,
                                     encodedData,
                                     bufferInfo,
+                                )
+
+                                encodedFrames += 1L
+                                RecorderDiagnosticsStore.onEncodedFrame(
+                                    count = encodedFrames,
+                                    presentationTimeUs = bufferInfo.presentationTimeUs,
                                 )
                             }
 
                             codec.releaseOutputBuffer(outputBufferIndex, false)
 
                             if (
-                                bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                                bufferInfo.flags and
+                                MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                             ) {
                                 break
                             }
@@ -307,6 +377,7 @@ class ScreenRecorderEngine(
             }
         } catch (error: Throwable) {
             drainFailure = error
+            RecorderDiagnosticsStore.error(error.message ?: "Video encoder drain failed.")
         }
     }
 
@@ -336,13 +407,9 @@ class ScreenRecorderEngine(
             val tree = requireNotNull(DocumentFile.fromTreeUri(context, treeUri)) {
                 "Unable to access selected storage folder."
             }
-
-            val document = requireNotNull(
-                tree.createFile("video/mp4", displayName),
-            ) {
+            val document = requireNotNull(tree.createFile("video/mp4", displayName)) {
                 "Unable to create video in selected folder."
             }
-
             val pfd = requireNotNull(
                 context.contentResolver.openFileDescriptor(document.uri, "rw"),
             ) {
@@ -414,10 +481,14 @@ class ScreenRecorderEngine(
 
     private fun finalizeOutput(output: OutputHandle) {
         if (output.pendingMediaStoreItem && output.uri != null) {
-            val values = ContentValues().apply {
-                put(MediaStore.Video.Media.IS_PENDING, 0)
-            }
-            context.contentResolver.update(output.uri, values, null, null)
+            context.contentResolver.update(
+                output.uri,
+                ContentValues().apply {
+                    put(MediaStore.Video.Media.IS_PENDING, 0)
+                },
+                null,
+                null,
+            )
             return
         }
 
@@ -445,27 +516,34 @@ class ScreenRecorderEngine(
         }
     }
 
-    private fun scaledEvenSize(
+    private fun scaledSize(
         sourceWidth: Int,
         sourceHeight: Int,
+        maxLongEdge: Int,
     ): Pair<Int, Int> {
-        val longest = maxOf(sourceWidth, sourceHeight)
-        val scale = if (longest > MAX_LONG_EDGE) {
-            MAX_LONG_EDGE.toFloat() / longest.toFloat()
+        val longest = max(sourceWidth, sourceHeight)
+        val scale = if (longest > maxLongEdge) {
+            maxLongEdge.toFloat() / longest.toFloat()
         } else {
             1f
         }
 
-        var width = (sourceWidth * scale).toInt().coerceAtLeast(2)
-        var height = (sourceHeight * scale).toInt().coerceAtLeast(2)
-
-        if (width % 2 != 0) width -= 1
-        if (height % 2 != 0) height -= 1
-
-        return width to height
+        return Pair(
+            (sourceWidth * scale).toInt().coerceAtLeast(16),
+            (sourceHeight * scale).toInt().coerceAtLeast(16),
+        )
     }
 
-    private fun clearRuntimeState() {
+    private fun alignDown(value: Int, alignment: Int): Int =
+        (value / alignment * alignment).coerceAtLeast(alignment)
+
+    private fun calculateBitRate(width: Int, height: Int): Int {
+        val pixelsPerSecond = width.toLong() * height.toLong() * VIDEO_FRAME_RATE
+        return (pixelsPerSecond * BITS_PER_PIXEL).toInt()
+            .coerceIn(MIN_BIT_RATE, MAX_BIT_RATE)
+    }
+
+    private fun clearRuntimeState(resetDiagnostics: Boolean) {
         encoder = null
         inputSurface = null
         muxer = null
@@ -475,7 +553,16 @@ class ScreenRecorderEngine(
         drainFailure = null
         muxerStarted = false
         abortDrain = false
+        encodedFrames = 0L
+        if (resetDiagnostics) RecorderDiagnosticsStore.reset()
     }
+
+    private data class EncoderCandidate(
+        val codecName: String,
+        val width: Int,
+        val height: Int,
+        val bitRate: Int,
+    )
 
     private data class OutputHandle(
         val displayName: String,
@@ -488,10 +575,12 @@ class ScreenRecorderEngine(
 
     companion object {
         private const val MIME_TYPE = "video/avc"
-        private const val VIDEO_BIT_RATE = 8_000_000
         private const val VIDEO_FRAME_RATE = 30
         private const val I_FRAME_INTERVAL_SECONDS = 1
-        private const val MAX_LONG_EDGE = 1920
+        private const val BITS_PER_PIXEL = 0.10
+        private const val MIN_BIT_RATE = 3_000_000
+        private const val MAX_BIT_RATE = 14_000_000
+        private const val MIN_VALID_FRAMES = 2L
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 8_000L
         private const val DRAIN_ABORT_JOIN_TIMEOUT_MS = 1_500L
