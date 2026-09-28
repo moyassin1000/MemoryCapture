@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
+import android.content.res.Configuration
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -26,6 +27,7 @@ import com.memorycapture.app.recording.RecordingStateStore
 import com.memorycapture.app.recording.SavedRecordingStore
 import com.memorycapture.app.service.RecordingService
 import com.memorycapture.app.ui.theme.MemoryCaptureTheme
+import com.memorycapture.app.ui.player.PlayerUiModeStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -129,6 +131,14 @@ class MainActivity : AppCompatActivity() {
             .putExtra(RecordingService.EXTRA_STORAGE_LABEL, storageLabel)
 
         ContextCompat.startForegroundService(this, intent)
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        PlayerUiModeStore.setPictureInPicture(isInPictureInPictureMode)
     }
 
     override fun onDestroy() {

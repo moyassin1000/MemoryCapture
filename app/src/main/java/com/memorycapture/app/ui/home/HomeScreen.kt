@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
@@ -233,6 +234,50 @@ fun HomeScreen(
                                     ProfileMetric(
                                         stringResource(R.string.no_audio),
                                         stringResource(R.string.audio),
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (active) {
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .shadow(14.dp, MaterialTheme.shapes.large),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.92f),
+                                ),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(18.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FiberManualRecord,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                    )
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.live_session),
+                                            fontWeight = FontWeight.Black,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.live_session_body),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.78f),
+                                        )
+                                    }
+                                    Text(
+                                        text = elapsed ?: "00:00",
+                                        fontWeight = FontWeight.Black,
+                                        color = MaterialTheme.colorScheme.error,
                                     )
                                 }
                             }
