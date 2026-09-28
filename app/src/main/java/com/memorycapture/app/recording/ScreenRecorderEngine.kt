@@ -17,7 +17,9 @@ import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.view.Surface
 import androidx.documentfile.provider.DocumentFile
+import com.memorycapture.app.data.preferences.AudioMode
 import java.io.File
+import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -38,6 +40,10 @@ class ScreenRecorderEngine(
     private var virtualDisplay: VirtualDisplay? = null
     private var outputHandle: OutputHandle? = null
     private var drainThread: Thread? = null
+    private var audioCaptureEngine: AudioCaptureEngine? = null
+
+    private val muxerLock = Any()
+    private val pendingSamples = ArrayDeque<PendingSample>()
 
     @Volatile
     private var drainFailure: Throwable? = null
@@ -48,12 +54,17 @@ class ScreenRecorderEngine(
     @Volatile
     private var abortDrain = false
 
+    private var videoTrackIndex = -1
+    private var audioTrackIndex = -1
+    private var expectedTrackCount = 1
+    private var pendingBytes = 0
     private var started = false
 
     fun start(
         projection: MediaProjection,
         customTreeUri: String? = null,
         customStorageLabel: String? = null,
+        audioMode: AudioMode = AudioMode.None,
     ) {
         check(!started) { "A recording session is already active." }
 
@@ -65,8 +76,13 @@ class ScreenRecorderEngine(
         var localSurface: Surface? = null
         var localMuxer: MediaMuxer? = null
         var localDisplay: VirtualDisplay? = null
+        var localAudio: AudioCaptureEngine? = null
 
         try {
+            resetMuxerState(
+                trackCount = if (audioMode == AudioMode.None) 1 else 2,
+            )
+
             val format = MediaFormat.createVideoFormat(MIME_TYPE, width, height).apply {
                 setInteger(
                     MediaFormat.KEY_COLOR_FORMAT,
@@ -88,8 +104,53 @@ class ScreenRecorderEngine(
 
             localSurface = localEncoder.createInputSurface()
             localMuxer = createMuxer(output)
-
             localEncoder.start()
+
+            encoder = localEncoder
+            inputSurface = localSurface
+            muxer = localMuxer
+            outputHandle = output
+            drainFailure = null
+            abortDrain = false
+            started = true
+
+            drainThread = thread(
+                start = true,
+                name = "MemoryCapture-VideoEncoder",
+            ) {
+                drainVideoEncoder(localEncoder, localMuxer)
+            }
+
+            if (audioMode != AudioMode.None) {
+                localAudio = AudioCaptureEngine(context).also { audio ->
+                    audio.start(
+                        projection = projection,
+                        mode = audioMode,
+                        sink = object : AudioMuxerSink {
+                            override fun onAudioFormat(format: MediaFormat) {
+                                registerTrack(
+                                    kind = TrackKind.Audio,
+                                    format = format,
+                                    activeMuxer = localMuxer,
+                                )
+                            }
+
+                            override fun onAudioSample(
+                                buffer: ByteBuffer,
+                                info: MediaCodec.BufferInfo,
+                            ) {
+                                writeEncodedSample(
+                                    kind = TrackKind.Audio,
+                                    buffer = buffer,
+                                    info = info,
+                                    activeMuxer = localMuxer,
+                                )
+                            }
+                        },
+                    )
+                }
+                audioCaptureEngine = localAudio
+            }
 
             localDisplay = projection.createVirtualDisplay(
                 "MemoryCapture",
@@ -102,29 +163,23 @@ class ScreenRecorderEngine(
                 null,
             )
 
-            encoder = localEncoder
-            inputSurface = localSurface
-            muxer = localMuxer
             virtualDisplay = localDisplay
-            outputHandle = output
-
-            drainFailure = null
-            muxerStarted = false
-            abortDrain = false
-            started = true
-
-            drainThread = thread(
-                start = true,
-                name = "MemoryCapture-VideoEncoder",
-            ) {
-                drainEncoder(localEncoder, localMuxer)
-            }
         } catch (error: Throwable) {
+            started = false
+            abortDrain = true
             runCatching { localDisplay?.release() }
+            runCatching { localAudio?.abort() }
             runCatching { localSurface?.release() }
             runCatching { localEncoder?.stop() }
             runCatching { localEncoder?.release() }
-            runCatching { localMuxer?.release() }
+
+            synchronized(muxerLock) {
+                if (muxerStarted) {
+                    runCatching { localMuxer?.stop() }
+                }
+                runCatching { localMuxer?.release() }
+            }
+
             cleanupFailedOutput(output)
             clearRuntimeState()
             throw error
@@ -138,6 +193,7 @@ class ScreenRecorderEngine(
         val activeSurface = inputSurface
         val activeMuxer = muxer
         val activeDisplay = virtualDisplay
+        val activeAudio = audioCaptureEngine
         val output = outputHandle
         val activeDrainThread = drainThread
 
@@ -153,6 +209,11 @@ class ScreenRecorderEngine(
                 activeEncoder?.signalEndOfInputStream()
             }.isSuccess
             if (!signaled) stoppedCleanly = false
+
+            activeAudio?.stopAndWait()
+            if (activeAudio?.failure != null) {
+                stoppedCleanly = false
+            }
 
             activeDrainThread?.join(DRAIN_JOIN_TIMEOUT_MS)
 
@@ -176,14 +237,16 @@ class ScreenRecorderEngine(
             runCatching { activeEncoder?.release() }
             runCatching { activeSurface?.release() }
 
-            if (muxerStarted) {
-                runCatching { activeMuxer?.stop() }
-                    .onFailure { stoppedCleanly = false }
-            } else {
-                stoppedCleanly = false
+            synchronized(muxerLock) {
+                if (muxerStarted) {
+                    runCatching { activeMuxer?.stop() }
+                        .onFailure { stoppedCleanly = false }
+                } else {
+                    stoppedCleanly = false
+                }
+                runCatching { activeMuxer?.release() }
             }
 
-            runCatching { activeMuxer?.release() }
             runCatching { output?.fileDescriptor?.close() }
 
             clearRuntimeState()
@@ -210,6 +273,7 @@ class ScreenRecorderEngine(
         val activeSurface = inputSurface
         val activeMuxer = muxer
         val activeDisplay = virtualDisplay
+        val activeAudio = audioCaptureEngine
         val output = outputHandle
         val activeDrainThread = drainThread
 
@@ -217,6 +281,7 @@ class ScreenRecorderEngine(
         abortDrain = true
 
         runCatching { activeDisplay?.release() }
+        runCatching { activeAudio?.abort() }
 
         try {
             activeDrainThread?.join(DRAIN_ABORT_JOIN_TIMEOUT_MS)
@@ -228,10 +293,13 @@ class ScreenRecorderEngine(
         runCatching { activeEncoder?.release() }
         runCatching { activeSurface?.release() }
 
-        if (muxerStarted) {
-            runCatching { activeMuxer?.stop() }
+        synchronized(muxerLock) {
+            if (muxerStarted) {
+                runCatching { activeMuxer?.stop() }
+            }
+            runCatching { activeMuxer?.release() }
         }
-        runCatching { activeMuxer?.release() }
+
         runCatching { output?.fileDescriptor?.close() }
 
         if (output != null) {
@@ -243,12 +311,11 @@ class ScreenRecorderEngine(
 
     fun isActive(): Boolean = started
 
-    private fun drainEncoder(
+    private fun drainVideoEncoder(
         codec: MediaCodec,
         activeMuxer: MediaMuxer,
     ) {
         val bufferInfo = MediaCodec.BufferInfo()
-        var videoTrackIndex = -1
 
         try {
             while (!abortDrain) {
@@ -259,13 +326,11 @@ class ScreenRecorderEngine(
                     MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
 
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                        check(!muxerStarted) {
-                            "The video encoder output format changed more than once."
-                        }
-
-                        videoTrackIndex = activeMuxer.addTrack(codec.outputFormat)
-                        activeMuxer.start()
-                        muxerStarted = true
+                        registerTrack(
+                            kind = TrackKind.Video,
+                            format = codec.outputFormat,
+                            activeMuxer = activeMuxer,
+                        )
                     }
 
                     else -> {
@@ -280,17 +345,14 @@ class ScreenRecorderEngine(
                             }
 
                             if (bufferInfo.size > 0) {
-                                check(muxerStarted && videoTrackIndex >= 0) {
-                                    "Received encoded video before MediaMuxer was ready."
-                                }
-
                                 encodedData.position(bufferInfo.offset)
                                 encodedData.limit(bufferInfo.offset + bufferInfo.size)
 
-                                activeMuxer.writeSampleData(
-                                    videoTrackIndex,
-                                    encodedData,
-                                    bufferInfo,
+                                writeEncodedSample(
+                                    kind = TrackKind.Video,
+                                    buffer = encodedData,
+                                    info = bufferInfo,
+                                    activeMuxer = activeMuxer,
                                 )
                             }
 
@@ -307,6 +369,114 @@ class ScreenRecorderEngine(
             }
         } catch (error: Throwable) {
             drainFailure = error
+        }
+    }
+
+    private fun registerTrack(
+        kind: TrackKind,
+        format: MediaFormat,
+        activeMuxer: MediaMuxer,
+    ) {
+        synchronized(muxerLock) {
+            when (kind) {
+                TrackKind.Video -> {
+                    if (videoTrackIndex >= 0) return
+                    videoTrackIndex = activeMuxer.addTrack(format)
+                }
+
+                TrackKind.Audio -> {
+                    if (audioTrackIndex >= 0) return
+                    audioTrackIndex = activeMuxer.addTrack(format)
+                }
+            }
+
+            val readyTracks =
+                (if (videoTrackIndex >= 0) 1 else 0) +
+                    (if (audioTrackIndex >= 0) 1 else 0)
+
+            if (!muxerStarted && readyTracks == expectedTrackCount) {
+                activeMuxer.start()
+                muxerStarted = true
+                flushPendingSamples(activeMuxer)
+            }
+        }
+    }
+
+    private fun writeEncodedSample(
+        kind: TrackKind,
+        buffer: ByteBuffer,
+        info: MediaCodec.BufferInfo,
+        activeMuxer: MediaMuxer,
+    ) {
+        if (info.size <= 0) return
+
+        synchronized(muxerLock) {
+            if (muxerStarted) {
+                val trackIndex = trackIndex(kind)
+                check(trackIndex >= 0) {
+                    "Encoded sample arrived before its muxer track was registered."
+                }
+                activeMuxer.writeSampleData(trackIndex, buffer, info)
+                return
+            }
+
+            val copy = ByteArray(info.size)
+            val duplicate = buffer.duplicate().apply {
+                position(info.offset)
+                limit(info.offset + info.size)
+            }
+            duplicate.get(copy)
+
+            pendingBytes += copy.size
+            check(pendingBytes <= MAX_PENDING_BYTES) {
+                "Audio/video muxer preparation exceeded the pending buffer limit."
+            }
+
+            pendingSamples.addLast(
+                PendingSample(
+                    kind = kind,
+                    data = copy,
+                    presentationTimeUs = info.presentationTimeUs,
+                    flags = info.flags,
+                ),
+            )
+        }
+    }
+
+    private fun flushPendingSamples(activeMuxer: MediaMuxer) {
+        while (pendingSamples.isNotEmpty()) {
+            val pending = pendingSamples.removeFirst()
+            val info = MediaCodec.BufferInfo().apply {
+                set(
+                    0,
+                    pending.data.size,
+                    pending.presentationTimeUs,
+                    pending.flags,
+                )
+            }
+            activeMuxer.writeSampleData(
+                trackIndex(pending.kind),
+                ByteBuffer.wrap(pending.data),
+                info,
+            )
+        }
+        pendingBytes = 0
+    }
+
+    private fun trackIndex(kind: TrackKind): Int =
+        when (kind) {
+            TrackKind.Video -> videoTrackIndex
+            TrackKind.Audio -> audioTrackIndex
+        }
+
+    private fun resetMuxerState(trackCount: Int) {
+        synchronized(muxerLock) {
+            expectedTrackCount = trackCount
+            videoTrackIndex = -1
+            audioTrackIndex = -1
+            muxerStarted = false
+            pendingSamples.clear()
+            pendingBytes = 0
         }
     }
 
@@ -327,9 +497,10 @@ class ScreenRecorderEngine(
         customTreeUri: String?,
         customStorageLabel: String?,
     ): OutputHandle {
-        val displayName = "MemoryCapture_${
-            SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        }.mp4"
+        val displayName =
+            "MemoryCapture_" +
+                SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) +
+                ".mp4"
 
         if (!customTreeUri.isNullOrBlank()) {
             val treeUri = Uri.parse(customTreeUri)
@@ -367,7 +538,7 @@ class ScreenRecorderEngine(
                 put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
                 put(
                     MediaStore.Video.Media.RELATIVE_PATH,
-                    "${Environment.DIRECTORY_MOVIES}/MemoryCapture",
+                    Environment.DIRECTORY_MOVIES + "/MemoryCapture",
                 )
                 put(MediaStore.Video.Media.IS_PENDING, 1)
             }
@@ -392,7 +563,7 @@ class ScreenRecorderEngine(
                 uri = uri,
                 fileDescriptor = pfd,
                 absolutePath = null,
-                locationLabel = "${Environment.DIRECTORY_MOVIES}/MemoryCapture",
+                locationLabel = Environment.DIRECTORY_MOVIES + "/MemoryCapture",
                 pendingMediaStoreItem = true,
             )
         }
@@ -472,10 +643,23 @@ class ScreenRecorderEngine(
         virtualDisplay = null
         outputHandle = null
         drainThread = null
+        audioCaptureEngine = null
         drainFailure = null
-        muxerStarted = false
         abortDrain = false
+        resetMuxerState(1)
     }
+
+    private enum class TrackKind {
+        Video,
+        Audio,
+    }
+
+    private data class PendingSample(
+        val kind: TrackKind,
+        val data: ByteArray,
+        val presentationTimeUs: Long,
+        val flags: Int,
+    )
 
     private data class OutputHandle(
         val displayName: String,
@@ -495,5 +679,6 @@ class ScreenRecorderEngine(
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 8_000L
         private const val DRAIN_ABORT_JOIN_TIMEOUT_MS = 1_500L
+        private const val MAX_PENDING_BYTES = 16 * 1024 * 1024
     }
 }
