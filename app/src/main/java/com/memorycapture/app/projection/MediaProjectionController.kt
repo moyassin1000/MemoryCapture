@@ -13,7 +13,11 @@ class MediaProjectionController(context: Context) {
 
     fun start(resultCode: Int, data: Intent, onStopped: () -> Unit): MediaProjection {
         stop()
-        val created = manager.getMediaProjection(resultCode, data)
+
+        val created = requireNotNull(manager.getMediaProjection(resultCode, data)) {
+            "MediaProjection could not be created from the granted result data."
+        }
+
         created.registerCallback(
             object : MediaProjection.Callback() {
                 override fun onStop() {
@@ -23,6 +27,7 @@ class MediaProjectionController(context: Context) {
             },
             Handler(Looper.getMainLooper()),
         )
+
         projection = created
         return created
     }
