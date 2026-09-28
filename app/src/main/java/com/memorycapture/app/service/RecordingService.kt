@@ -14,6 +14,7 @@ import com.memorycapture.app.MainActivity
 import com.memorycapture.app.R
 import com.memorycapture.app.projection.MediaProjectionController
 import com.memorycapture.app.recording.RecordingError
+import com.memorycapture.app.recording.RecordingSessionStore
 import com.memorycapture.app.recording.RecordingState
 import com.memorycapture.app.recording.RecordingStateStore
 import com.memorycapture.app.recording.SavedRecording
@@ -62,11 +63,17 @@ class RecordingService : Service() {
             val projection = projectionController.start(resultCode, resultData) {
                 handleProjectionStopped()
             }
-            recorderEngine.start(projection)
+            recorderEngine.start(
+                projection = projection,
+                customTreeUri = intent.getStringExtra(EXTRA_STORAGE_TREE_URI),
+                customStorageLabel = intent.getStringExtra(EXTRA_STORAGE_LABEL),
+            )
         }.onSuccess {
+            RecordingSessionStore.markStarted()
             RecordingStateStore.transition(RecordingState.Recording)
         }.onFailure {
             recorderEngine.abort()
+            RecordingSessionStore.clear()
             intentionalStop = true
             projectionController.stop()
             RecordingStateStore.forceError(RecordingError.EncoderUnavailable)
@@ -76,14 +83,13 @@ class RecordingService : Service() {
 
     private fun stopProjectionSession() {
         val state = RecordingStateStore.state.value
-        if (state !is RecordingState.Recording && state !is RecordingState.Paused) {
-            return
-        }
+        if (state !is RecordingState.Recording && state !is RecordingState.Paused) return
 
         RecordingStateStore.transition(RecordingState.Stopping)
         RecordingStateStore.transition(RecordingState.Processing)
 
         val saved = recorderEngine.stopAndSave()
+        RecordingSessionStore.clear()
         intentionalStop = true
         projectionController.stop()
 
@@ -106,6 +112,7 @@ class RecordingService : Service() {
             RecordingStateStore.transition(RecordingState.Processing)
 
             val saved = recorderEngine.stopAndSave()
+            RecordingSessionStore.clear()
             if (saved != null) {
                 publishSavedRecording(saved)
                 RecordingStateStore.transition(RecordingState.Completed)
@@ -177,11 +184,9 @@ class RecordingService : Service() {
     override fun onDestroy() {
         if (recorderEngine.isActive()) {
             val saved = recorderEngine.stopAndSave()
-            if (saved != null) {
-                publishSavedRecording(saved)
-            }
+            if (saved != null) publishSavedRecording(saved)
         }
-
+        RecordingSessionStore.clear()
         intentionalStop = true
         projectionController.stop()
         super.onDestroy()
@@ -194,6 +199,8 @@ class RecordingService : Service() {
         const val ACTION_STOP = "com.memorycapture.app.action.STOP"
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_RESULT_DATA = "result_data"
+        const val EXTRA_STORAGE_TREE_URI = "storage_tree_uri"
+        const val EXTRA_STORAGE_LABEL = "storage_label"
         private const val CHANNEL_ID = "recording"
         private const val NOTIFICATION_ID = 1001
     }

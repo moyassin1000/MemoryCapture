@@ -1,0 +1,91 @@
+package com.memorycapture.app.data.preferences
+
+import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
+private val Context.memoryCaptureDataStore by preferencesDataStore(
+    name = "memorycapture_settings",
+)
+
+enum class ThemeMode {
+    System,
+    Light,
+    Dark,
+}
+
+class AppPreferences(
+    private val context: Context,
+) {
+    val themeMode: Flow<ThemeMode> = context.memoryCaptureDataStore.data.map { preferences ->
+        runCatching {
+            ThemeMode.valueOf(preferences[KEY_THEME] ?: ThemeMode.System.name)
+        }.getOrDefault(ThemeMode.System)
+    }
+
+    val countdownEnabled: Flow<Boolean> = context.memoryCaptureDataStore.data.map {
+        it[KEY_COUNTDOWN_ENABLED] ?: true
+    }
+
+    val countdownSeconds: Flow<Int> = context.memoryCaptureDataStore.data.map {
+        (it[KEY_COUNTDOWN_SECONDS] ?: 3).coerceIn(3, 10)
+    }
+
+    val storageTreeUri: Flow<String?> = context.memoryCaptureDataStore.data.map {
+        it[KEY_STORAGE_TREE_URI]
+    }
+
+    val storageLabel: Flow<String?> = context.memoryCaptureDataStore.data.map {
+        it[KEY_STORAGE_LABEL]
+    }
+
+    val updateNotificationsEnabled: Flow<Boolean> = context.memoryCaptureDataStore.data.map {
+        it[KEY_UPDATE_NOTIFICATIONS] ?: false
+    }
+
+    suspend fun setThemeMode(mode: ThemeMode) {
+        context.memoryCaptureDataStore.edit { it[KEY_THEME] = mode.name }
+    }
+
+    suspend fun setCountdownEnabled(enabled: Boolean) {
+        context.memoryCaptureDataStore.edit { it[KEY_COUNTDOWN_ENABLED] = enabled }
+    }
+
+    suspend fun setCountdownSeconds(seconds: Int) {
+        context.memoryCaptureDataStore.edit {
+            it[KEY_COUNTDOWN_SECONDS] = seconds.coerceIn(3, 10)
+        }
+    }
+
+    suspend fun setStorageTree(uri: String?, label: String?) {
+        context.memoryCaptureDataStore.edit {
+            if (uri == null) {
+                it.remove(KEY_STORAGE_TREE_URI)
+                it.remove(KEY_STORAGE_LABEL)
+            } else {
+                it[KEY_STORAGE_TREE_URI] = uri
+                it[KEY_STORAGE_LABEL] = label.orEmpty()
+            }
+        }
+    }
+
+    suspend fun setUpdateNotificationsEnabled(enabled: Boolean) {
+        context.memoryCaptureDataStore.edit {
+            it[KEY_UPDATE_NOTIFICATIONS] = enabled
+        }
+    }
+
+    companion object {
+        private val KEY_THEME = stringPreferencesKey("theme")
+        private val KEY_COUNTDOWN_ENABLED = booleanPreferencesKey("countdown_enabled")
+        private val KEY_COUNTDOWN_SECONDS = intPreferencesKey("countdown_seconds")
+        private val KEY_STORAGE_TREE_URI = stringPreferencesKey("storage_tree_uri")
+        private val KEY_STORAGE_LABEL = stringPreferencesKey("storage_label")
+        private val KEY_UPDATE_NOTIFICATIONS = booleanPreferencesKey("update_notifications")
+    }
+}
