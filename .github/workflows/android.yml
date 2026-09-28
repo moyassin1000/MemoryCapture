@@ -23,11 +23,9 @@ jobs:
           packages: 'platform-tools'
       - name: Install SDK
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
-      - name: Generate Gradle wrapper
-        run: gradle wrapper --gradle-version 9.6.1
       - name: Lint
-        run: ./gradlew lint
+        run: gradle lint --stacktrace
       - name: Unit tests
-        run: ./gradlew test
+        run: gradle test --stacktrace
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        run: gradle assembleDebug --stacktrace
