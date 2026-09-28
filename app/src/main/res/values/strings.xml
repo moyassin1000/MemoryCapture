@@ -212,4 +212,21 @@
     <string name="pro_showcase_title">Built for power users</string>
     <string name="pro_showcase_body">Unlock a stronger visual identity, premium themes, advanced insights and lifetime access.</string>
 
+
+    <string name="audio_studio">Audio Studio</string>
+    <string name="audio_studio_body">Choose exactly what should be recorded with the screen.</string>
+    <string name="audio_mode_off">Video only</string>
+    <string name="audio_mode_mic">Microphone</string>
+    <string name="audio_mode_device">Device audio</string>
+    <string name="audio_mode_both">Device + mic</string>
+    <string name="audio_mode_off_body">Record the screen without an audio track.</string>
+    <string name="audio_mode_mic_body">Record your active microphone input, including phone, wired, USB or Bluetooth microphones when routed by Android.</string>
+    <string name="audio_mode_device_body">Capture eligible app/game playback directly before it reaches speaker, headphones or Bluetooth output.</string>
+    <string name="audio_mode_both_body">Mix eligible device playback with your microphone into one AAC track.</string>
+    <string name="audio_android10_required">Device audio requires Android 10 or newer.</string>
+    <string name="audio_capture_limit_note">Some apps protect playback audio and Android will not allow it to be captured. Call audio and DRM-protected media are not guaranteed.</string>
+    <string name="audio_route_auto">Input route: automatic</string>
+    <string name="audio_ready">AAC • 48 kHz • synced with video</string>
+    <string name="audio_permission_denied">Microphone/audio permission was not granted.</string>
+
 </resources>
