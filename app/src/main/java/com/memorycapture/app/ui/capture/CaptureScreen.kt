@@ -1,22 +1,30 @@
 package com.memorycapture.app.ui.capture
 
 import android.content.Intent
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.VideoCameraBack
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,7 +41,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +52,7 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.memorycapture.app.R
 import com.memorycapture.app.data.preferences.AppPreferences
+import com.memorycapture.app.data.preferences.AudioMode
 import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.RecordingSessionStore
 import com.memorycapture.app.recording.RecordingState
@@ -63,6 +74,9 @@ fun CaptureScreen(
     val preferences = remember { AppPreferences(context.applicationContext) }
     val scope = rememberCoroutineScope()
     val storageLabel by preferences.storageLabel.collectAsStateWithLifecycle(initialValue = null)
+    val audioMode by preferences.audioMode.collectAsStateWithLifecycle(
+        initialValue = AudioMode.DeviceAndMic,
+    )
     val state by RecordingStateStore.state.collectAsStateWithLifecycle()
     val countdown by CountdownStore.seconds.collectAsStateWithLifecycle()
     val startedAt by RecordingSessionStore.startedAtElapsedRealtime.collectAsStateWithLifecycle()
@@ -91,6 +105,13 @@ fun CaptureScreen(
             title = stringResource(R.string.countdown_title),
         )
     }
+
+    val active = state is RecordingState.Recording || state is RecordingState.Paused
+    val busy = state is RecordingState.Preparing ||
+        state is RecordingState.PermissionRequired ||
+        state is RecordingState.Countdown ||
+        state is RecordingState.Stopping ||
+        state is RecordingState.Processing
 
     PremiumBackground {
         Scaffold(
@@ -128,34 +149,62 @@ fun CaptureScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .shadow(14.dp, MaterialTheme.shapes.large),
+                            .shadow(20.dp, MaterialTheme.shapes.large),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.96f),
                         ),
                     ) {
-                        Row(
-                            modifier = Modifier.padding(22.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        ) {
-                            Icon(
-                                Icons.Default.VideoCameraBack,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(5.dp),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.control_center),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Black,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        Column(
+                            modifier = Modifier
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(
+                                            MaterialTheme.colorScheme.primaryContainer,
+                                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.22f),
+                                        ),
+                                    ),
                                 )
-                                Text(
-                                    text = stringResource(R.string.recording_profile),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f),
+                                .padding(22.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.VideoCameraBack,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.control_center),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Black,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.audio_ready),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                ProfilePill(
+                                    icon = Icons.Default.HighQuality,
+                                    text = "1080p",
+                                )
+                                ProfilePill(
+                                    icon = Icons.Default.Speed,
+                                    text = "30 FPS",
+                                )
+                                ProfilePill(
+                                    icon = Icons.Default.GraphicEq,
+                                    text = audioModeShortLabel(audioMode),
                                 )
                             }
                         }
@@ -175,19 +224,24 @@ fun CaptureScreen(
                 }
 
                 item {
-                    val active = state is RecordingState.Recording || state is RecordingState.Paused
-                    val busy = state is RecordingState.Preparing ||
-                        state is RecordingState.PermissionRequired ||
-                        state is RecordingState.Countdown ||
-                        state is RecordingState.Stopping ||
-                        state is RecordingState.Processing
-
                     PrimaryRecordingButton(
                         active = active,
                         enabled = !busy,
                         startText = stringResource(R.string.start_recording),
                         stopText = stringResource(R.string.stop_recording),
                         onClick = if (active) onStopRecording else onStartRecording,
+                    )
+                }
+
+                item {
+                    AudioStudioCard(
+                        selected = audioMode,
+                        enabled = !active && !busy,
+                        onSelect = { mode ->
+                            scope.launch {
+                                preferences.setAudioMode(mode)
+                            }
+                        },
                     )
                 }
 
@@ -205,7 +259,10 @@ fun CaptureScreen(
                         title = stringResource(R.string.storage_location),
                         value = storageLabel ?: stringResource(R.string.default_storage),
                     ) {
-                        OutlinedButton(onClick = { folderPicker.launch(null) }) {
+                        OutlinedButton(
+                            enabled = !active && !busy,
+                            onClick = { folderPicker.launch(null) },
+                        ) {
                             Text(stringResource(R.string.change))
                         }
                     }
@@ -229,14 +286,6 @@ fun CaptureScreen(
 
                 item {
                     CaptureOptionCard(
-                        icon = Icons.Default.GraphicEq,
-                        title = stringResource(R.string.audio),
-                        value = stringResource(R.string.no_audio_coming_soon),
-                    )
-                }
-
-                item {
-                    CaptureOptionCard(
                         icon = Icons.Default.AllInclusive,
                         title = stringResource(R.string.recording_duration),
                         value = stringResource(R.string.unlimited_until_stopped),
@@ -248,6 +297,14 @@ fun CaptureScreen(
                         text = stringResource(R.string.unlimited_device_limits_note),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                item {
+                    Text(
+                        text = stringResource(R.string.audio_capture_limit_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 28.dp),
                     )
                 }
@@ -257,8 +314,204 @@ fun CaptureScreen(
 }
 
 @Composable
+private fun AudioStudioCard(
+    selected: AudioMode,
+    enabled: Boolean,
+    onSelect: (AudioMode) -> Unit,
+) {
+    val internalSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(14.dp, MaterialTheme.shapes.large),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Headphones,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.audio_studio),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                    )
+                    Text(
+                        text = stringResource(R.string.audio_studio_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                AudioModeCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Videocam,
+                    title = stringResource(R.string.audio_mode_off),
+                    selected = selected == AudioMode.None,
+                    enabled = enabled,
+                    onClick = { onSelect(AudioMode.None) },
+                )
+                AudioModeCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Mic,
+                    title = stringResource(R.string.audio_mode_mic),
+                    selected = selected == AudioMode.Microphone,
+                    enabled = enabled,
+                    onClick = { onSelect(AudioMode.Microphone) },
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                AudioModeCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Speaker,
+                    title = stringResource(R.string.audio_mode_device),
+                    selected = selected == AudioMode.DeviceAudio,
+                    enabled = enabled && internalSupported,
+                    onClick = { onSelect(AudioMode.DeviceAudio) },
+                )
+                AudioModeCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.GraphicEq,
+                    title = stringResource(R.string.audio_mode_both),
+                    selected = selected == AudioMode.DeviceAndMic,
+                    enabled = enabled && internalSupported,
+                    onClick = { onSelect(AudioMode.DeviceAndMic) },
+                )
+            }
+
+            Text(
+                text = if (internalSupported) {
+                    when (selected) {
+                        AudioMode.None -> stringResource(R.string.audio_mode_off_body)
+                        AudioMode.Microphone -> stringResource(R.string.audio_mode_mic_body)
+                        AudioMode.DeviceAudio -> stringResource(R.string.audio_mode_device_body)
+                        AudioMode.DeviceAndMic -> stringResource(R.string.audio_mode_both_body)
+                    }
+                } else {
+                    stringResource(R.string.audio_android10_required)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (selected == AudioMode.Microphone || selected == AudioMode.DeviceAndMic) {
+                Text(
+                    text = stringResource(R.string.audio_route_auto),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudioModeCard(
+    modifier: Modifier,
+    icon: ImageVector,
+    title: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = modifier
+            .clickable(enabled = enabled, onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = when {
+                selected -> MaterialTheme.colorScheme.primaryContainer
+                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+            },
+        ),
+        shape = RoundedCornerShape(20.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected) FontWeight.Black else FontWeight.SemiBold,
+                color = if (enabled) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfilePill(
+    icon: ImageVector,
+    text: String,
+) {
+    Row(
+        modifier = Modifier
+            .background(
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.64f),
+                RoundedCornerShape(18.dp),
+            )
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+@Composable
+private fun audioModeShortLabel(mode: AudioMode): String =
+    when (mode) {
+        AudioMode.None -> stringResource(R.string.audio_mode_off)
+        AudioMode.Microphone -> stringResource(R.string.audio_mode_mic)
+        AudioMode.DeviceAudio -> stringResource(R.string.audio_mode_device)
+        AudioMode.DeviceAndMic -> stringResource(R.string.audio_mode_both)
+    }
+
+@Composable
 private fun CaptureOptionCard(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     title: String,
     value: String,
     action: (@Composable () -> Unit)? = null,
