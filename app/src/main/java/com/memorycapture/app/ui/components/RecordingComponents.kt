@@ -2,16 +2,24 @@ package com.memorycapture.app.ui.components
 
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -24,7 +32,11 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -47,19 +59,21 @@ fun RecordingStatusCard(
             recordingLabel to MaterialTheme.colorScheme.error
         RecordingState.Stopping, RecordingState.Processing ->
             savingLabel to MaterialTheme.colorScheme.primary
-        RecordingState.Completed -> savedLabel to Color(0xFF18864B)
+        RecordingState.Completed -> savedLabel to Color(0xFF2FB56F)
         is RecordingState.Error -> errorLabel to MaterialTheme.colorScheme.error
-        else -> readyLabel to Color(0xFF18864B)
+        else -> readyLabel to Color(0xFF2FB56F)
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(12.dp, MaterialTheme.shapes.large),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         ),
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -67,14 +81,15 @@ fun RecordingStatusCard(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                 )
             }
+
             if (elapsed != null) {
                 Text(
                     text = elapsed,
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Black,
                 )
             }
         }
@@ -89,21 +104,55 @@ fun PrimaryRecordingButton(
     stopText: String,
     onClick: () -> Unit,
 ) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
+    val transition = rememberInfiniteTransition(label = "recordButton")
+    val pulse by transition.animateFloat(
+        initialValue = 0.985f,
+        targetValue = if (active) 1.02f else 1.008f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1100, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "recordButtonPulse",
+    )
+
+    val colors = if (active) {
+        listOf(
+            MaterialTheme.colorScheme.error,
+            Color(0xFFFF5A67),
+        )
+    } else {
+        listOf(
+            MaterialTheme.colorScheme.primary,
+            MaterialTheme.colorScheme.tertiary,
+        )
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = if (enabled) pulse else 1f
+                scaleY = if (enabled) pulse else 1f
+                alpha = if (enabled) 1f else 0.48f
+            }
+            .shadow(18.dp, RoundedCornerShape(28.dp))
+            .clip(RoundedCornerShape(28.dp))
+            .background(Brush.horizontalGradient(colors))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 22.dp, vertical = 20.dp),
+        horizontalArrangement = Arrangement.Center,
     ) {
         Icon(
             imageVector = if (active) Icons.Default.Stop else Icons.Default.FiberManualRecord,
             contentDescription = null,
+            tint = Color.White,
         )
         Text(
             text = if (active) stopText else startText,
-            modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = 10.dp),
+            color = Color.White,
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Black,
         )
     }
 }
@@ -120,6 +169,7 @@ fun CountdownDialog(
                 text = title,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Bold,
             )
         },
         text = {
@@ -131,8 +181,8 @@ fun CountdownDialog(
                     text = value.toString(),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
-                    fontSize = 72.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 76.sp,
+                    fontWeight = FontWeight.Black,
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
