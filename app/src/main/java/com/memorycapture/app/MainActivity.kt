@@ -152,6 +152,7 @@ class MainActivity : AppCompatActivity() {
         val storageTreeUri = preferences.storageTreeUri.first()
         val storageLabel = preferences.storageLabel.first()
         val audioMode = effectiveAudioMode(preferences.audioMode.first())
+        val microphoneDeviceId = preferences.microphoneDeviceId.first()
 
         val intent = Intent(this, RecordingService::class.java)
             .setAction(RecordingService.ACTION_START)
@@ -160,6 +161,7 @@ class MainActivity : AppCompatActivity() {
             .putExtra(RecordingService.EXTRA_STORAGE_TREE_URI, storageTreeUri)
             .putExtra(RecordingService.EXTRA_STORAGE_LABEL, storageLabel)
             .putExtra(RecordingService.EXTRA_AUDIO_MODE, audioMode.name)
+            .putExtra(RecordingService.EXTRA_MICROPHONE_DEVICE_ID, microphoneDeviceId)
 
         ContextCompat.startForegroundService(this, intent)
     }
