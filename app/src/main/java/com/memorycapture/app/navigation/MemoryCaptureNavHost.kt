@@ -53,6 +53,7 @@ import com.memorycapture.app.ui.components.rememberRecordingElapsed
 import com.memorycapture.app.ui.capture.CaptureScreen
 import com.memorycapture.app.ui.home.HomeScreen
 import com.memorycapture.app.ui.pro.ProScreen
+import com.memorycapture.app.ui.player.VideoPlayerScreen
 import com.memorycapture.app.ui.recordings.RecordingDetailsScreen
 import com.memorycapture.app.ui.recordings.RecordingsScreen
 import com.memorycapture.app.ui.settings.SettingsScreen
@@ -171,6 +172,11 @@ fun MemoryCaptureNavHost(
                             AppDestination.RecordingDetails.createRoute(uri),
                         )
                     },
+                    onPlayRecording = { uri ->
+                        navController.navigate(
+                            AppDestination.Player.createRoute(uri),
+                        )
+                    },
                     onGoToCapture = {
                         navController.navigate(AppDestination.Capture.route)
                     },
@@ -211,6 +217,26 @@ fun MemoryCaptureNavHost(
             ) { entry ->
                 val encoded = entry.arguments?.getString("uri").orEmpty()
                 RecordingDetailsScreen(
+                    uriString = Uri.decode(encoded),
+                    onBack = { navController.popBackStack() },
+                    onPlay = { uri ->
+                        navController.navigate(
+                            AppDestination.Player.createRoute(uri),
+                        )
+                    },
+                )
+            }
+
+            composable(
+                route = AppDestination.Player.route,
+                arguments = listOf(
+                    navArgument("uri") {
+                        type = NavType.StringType
+                    },
+                ),
+            ) { entry ->
+                val encoded = entry.arguments?.getString("uri").orEmpty()
+                VideoPlayerScreen(
                     uriString = Uri.decode(encoded),
                     onBack = { navController.popBackStack() },
                 )

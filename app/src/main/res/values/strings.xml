@@ -203,4 +203,13 @@
     <string name="pro_compare_themes">Premium themes</string>
     <string name="pro_compare_insights">Advanced insights</string>
 
+
+    <string name="video_player">Video player</string>
+    <string name="pause">Pause</string>
+    <string name="rewind_10_seconds">Rewind 10 seconds</string>
+    <string name="forward_10_seconds">Forward 10 seconds</string>
+    <string name="play_inside_app">Play in MemoryCapture</string>
+    <string name="pro_showcase_title">Built for power users</string>
+    <string name="pro_showcase_body">Unlock a stronger visual identity, premium themes, advanced insights and lifetime access.</string>
+
 </resources>

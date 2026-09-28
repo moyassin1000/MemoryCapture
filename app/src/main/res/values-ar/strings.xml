@@ -203,4 +203,13 @@
     <string name="pro_compare_themes">ثيمات Premium</string>
     <string name="pro_compare_insights">إحصاءات متقدمة</string>
 
+
+    <string name="video_player">مشغل الفيديو</string>
+    <string name="pause">إيقاف مؤقت</string>
+    <string name="rewind_10_seconds">رجوع 10 ثوانٍ</string>
+    <string name="forward_10_seconds">تقديم 10 ثوانٍ</string>
+    <string name="play_inside_app">تشغيل داخل MemoryCapture</string>
+    <string name="pro_showcase_title">مصمم للمستخدمين المتقدمين</string>
+    <string name="pro_showcase_body">افتح هوية بصرية أقوى وثيمات Premium وإحصاءات متقدمة ووصول دائم.</string>
+
 </resources>

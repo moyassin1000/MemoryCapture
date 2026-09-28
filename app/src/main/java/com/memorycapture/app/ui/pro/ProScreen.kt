@@ -239,6 +239,50 @@ fun ProScreen(
                 }
 
                 item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(12.dp, MaterialTheme.shapes.large),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                        ),
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(
+                                            MaterialTheme.colorScheme.surface,
+                                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f),
+                                        ),
+                                    ),
+                                )
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                )
+                                Text(
+                                    text = stringResource(R.string.pro_showcase_title),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Black,
+                                )
+                            }
+                            Text(
+                                text = stringResource(R.string.pro_showcase_body),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
+                item {
                     Text(
                         stringResource(R.string.pro_compare_title),
                         style = MaterialTheme.typography.titleLarge,
