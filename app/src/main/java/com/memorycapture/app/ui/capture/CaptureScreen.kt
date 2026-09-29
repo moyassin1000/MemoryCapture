@@ -9,11 +9,20 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
@@ -45,6 +54,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -381,7 +391,9 @@ private fun AudioStudioCard(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
                     imageVector = Icons.Default.Headphones,
@@ -400,6 +412,7 @@ private fun AudioStudioCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                AudioActivityBars(active = selected != AudioMode.None)
             }
 
             Row(
@@ -490,6 +503,68 @@ private fun AudioStudioCard(
     }
 }
 
+
+
+@Composable
+private fun AudioActivityBars(
+    active: Boolean,
+) {
+    val transition = rememberInfiniteTransition(label = "audioStudioBars")
+    val h1 by transition.animateFloat(
+        initialValue = 8f,
+        targetValue = 24f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(620, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "audioBar1",
+    )
+    val h2 by transition.animateFloat(
+        initialValue = 18f,
+        targetValue = 7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(780, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "audioBar2",
+    )
+    val h3 by transition.animateFloat(
+        initialValue = 12f,
+        targetValue = 28f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(540, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "audioBar3",
+    )
+    val h4 by transition.animateFloat(
+        initialValue = 22f,
+        targetValue = 10f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(700, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "audioBar4",
+    )
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf(h1, h2, h3, h4).forEach { value ->
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(if (active) value.dp else 8.dp)
+                    .background(
+                        if (active) MaterialTheme.colorScheme.tertiary
+                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                        RoundedCornerShape(4.dp),
+                    ),
+            )
+        }
+    }
+}
 
 @Composable
 private fun MicrophoneInputCard(
