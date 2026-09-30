@@ -250,6 +250,7 @@
     <string name="bitrate_balanced">Balanced</string>
     <string name="bitrate_high">High</string>
     <string name="profile_compatibility_note">MemoryCapture will try the selected profile first. If the device rejects 1440p or 60 FPS, it automatically falls back to a safe compatible profile.</string>
+    <string name="floating_screenshot">📸 Screenshot</string>
     <string name="floating_highlight">⭐ Highlight</string>
     <string name="highlights">Highlights</string>
     <string name="highlight_number_time">Highlight %1$d • %2$s</string>
