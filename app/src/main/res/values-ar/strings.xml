@@ -55,6 +55,11 @@
     <string name="notification_pause">إيقاف مؤقت</string>
     <string name="notification_resume">استئناف</string>
     <string name="notification_stop">إيقاف</string>
+    <string name="floating_controls_title">الزر العائم أثناء التسجيل</string>
+    <string name="floating_controls_enabled">مفعّل للظهور فوق التطبيقات</string>
+    <string name="floating_controls_disabled">يحتاج إذن الظهور فوق التطبيقات</string>
+    <string name="floating_controls_enable">تفعيل</string>
+    <string name="floating_controls_manage">إدارة</string>
 
     <string name="storage_location">مكان الحفظ</string>
     <string name="default_storage">Movies / MemoryCapture</string>
