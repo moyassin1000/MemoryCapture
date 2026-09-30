@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.memorycapture.app.R
 import com.memorycapture.app.data.preferences.AppPreferences
 import com.memorycapture.app.data.preferences.AudioMode
+import com.memorycapture.app.data.preferences.InstantReplayDuration
 import com.memorycapture.app.data.preferences.RecordingFrameRate
 import com.memorycapture.app.data.preferences.RecordingQuality
 import com.memorycapture.app.data.preferences.VideoBitratePreset
@@ -99,6 +100,9 @@ fun CaptureScreen(
     )
     val videoBitratePreset by preferences.videoBitratePreset.collectAsStateWithLifecycle(
         initialValue = VideoBitratePreset.Balanced,
+    )
+    val instantReplayDuration by preferences.instantReplayDuration.collectAsStateWithLifecycle(
+        initialValue = InstantReplayDuration.Seconds60,
     )
     val audioManager = remember {
         context.getSystemService(AudioManager::class.java)
@@ -383,6 +387,18 @@ fun CaptureScreen(
                 }
 
                 item {
+                    InstantReplayCard(
+                        selected = instantReplayDuration,
+                        enabled = !active && !busy,
+                        onSelect = { duration ->
+                            scope.launch {
+                                preferences.setInstantReplayDuration(duration)
+                            }
+                        },
+                    )
+                }
+
+                item {
                     CaptureOptionCard(
                         icon = Icons.Default.AllInclusive,
                         title = stringResource(R.string.recording_duration),
@@ -406,6 +422,64 @@ fun CaptureScreen(
                         modifier = Modifier.padding(bottom = 28.dp),
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InstantReplayCard(
+    selected: InstantReplayDuration,
+    enabled: Boolean,
+    onSelect: (InstantReplayDuration) -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(14.dp, MaterialTheme.shapes.large),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.instant_replay),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black,
+            )
+            Text(
+                text = stringResource(R.string.instant_replay_body),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                RecordingChoice(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.replay_30_seconds),
+                    selected = selected == InstantReplayDuration.Seconds30,
+                    enabled = enabled,
+                    onClick = { onSelect(InstantReplayDuration.Seconds30) },
+                )
+                RecordingChoice(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.replay_60_seconds),
+                    selected = selected == InstantReplayDuration.Seconds60,
+                    enabled = enabled,
+                    onClick = { onSelect(InstantReplayDuration.Seconds60) },
+                )
+                RecordingChoice(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.replay_180_seconds),
+                    selected = selected == InstantReplayDuration.Seconds180,
+                    enabled = enabled,
+                    onClick = { onSelect(InstantReplayDuration.Seconds180) },
+                )
             }
         }
     }
