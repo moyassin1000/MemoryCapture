@@ -49,6 +49,8 @@ import com.memorycapture.app.R
 import com.memorycapture.app.billing.ProBillingManager
 import com.memorycapture.app.data.preferences.AppPreferences
 import com.memorycapture.app.data.preferences.AudioMode
+import com.memorycapture.app.data.preferences.RecordingFrameRate
+import com.memorycapture.app.data.preferences.RecordingQuality
 import com.memorycapture.app.data.recordings.RecordingRepository
 import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.RecordingSessionStore
@@ -77,6 +79,12 @@ fun HomeScreen(
 
     val storageTreeUri by preferences.storageTreeUri.collectAsStateWithLifecycle(initialValue = null)
     val audioMode by preferences.audioMode.collectAsStateWithLifecycle(initialValue = AudioMode.DeviceAndMic)
+    val recordingQuality by preferences.recordingQuality.collectAsStateWithLifecycle(
+        initialValue = RecordingQuality.P1080,
+    )
+    val recordingFrameRate by preferences.recordingFrameRate.collectAsStateWithLifecycle(
+        initialValue = RecordingFrameRate.Fps30,
+    )
     val storageLabel by preferences.storageLabel.collectAsStateWithLifecycle(initialValue = null)
     val state by RecordingStateStore.state.collectAsStateWithLifecycle()
     val proState by ProBillingManager.state.collectAsStateWithLifecycle()
@@ -216,7 +224,10 @@ fun HomeScreen(
                                         },
                                     )
                                     Text(
-                                        text = stringResource(R.string.home_recording_profile_line),
+                                        text = homeProfileLine(
+                                            quality = recordingQuality,
+                                            frameRate = recordingFrameRate,
+                                        ),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -236,8 +247,14 @@ fun HomeScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceEvenly,
                                 ) {
-                                    ProfileMetric("1080p", stringResource(R.string.quality))
-                                    ProfileMetric("30", stringResource(R.string.frame_rate))
+                                    ProfileMetric(
+                                        homeQualityLabel(recordingQuality),
+                                        stringResource(R.string.quality),
+                                    )
+                                    ProfileMetric(
+                                        recordingFrameRate.fps.toString(),
+                                        stringResource(R.string.frame_rate),
+                                    )
                                     ProfileMetric(
                                         homeAudioLabel(audioMode),
                                         stringResource(R.string.audio),
@@ -476,6 +493,22 @@ private fun formatStorage(bytes: Long): String {
     }
 }
 
+
+@Composable
+private fun homeQualityLabel(quality: RecordingQuality): String =
+    when (quality) {
+        RecordingQuality.Auto -> stringResource(R.string.quality_auto)
+        RecordingQuality.P720 -> stringResource(R.string.quality_720p)
+        RecordingQuality.P1080 -> stringResource(R.string.quality_1080p)
+        RecordingQuality.P1440 -> stringResource(R.string.quality_1440p)
+    }
+
+@Composable
+private fun homeProfileLine(
+    quality: RecordingQuality,
+    frameRate: RecordingFrameRate,
+): String = "${homeQualityLabel(quality)} • ${frameRate.fps} FPS • " +
+    stringResource(R.string.unlimited_until_stopped)
 
 @Composable
 private fun homeAudioLabel(mode: AudioMode): String =
