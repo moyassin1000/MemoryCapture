@@ -25,12 +25,24 @@ import com.memorycapture.app.recording.ScreenRecorderEngine
 class RecordingService : Service() {
     private lateinit var projectionController: MediaProjectionController
     private lateinit var recorderEngine: ScreenRecorderEngine
+    private var floatingControls: FloatingRecordingControls? = null
     private var intentionalStop = false
 
     override fun onCreate() {
         super.onCreate()
         projectionController = MediaProjectionController(this)
         recorderEngine = ScreenRecorderEngine(this)
+        floatingControls = FloatingRecordingControls(
+            context = this,
+            onPauseResume = {
+                when (RecordingStateStore.state.value) {
+                    is RecordingState.Paused -> resumeProjectionSession()
+                    is RecordingState.Recording -> pauseProjectionSession()
+                    else -> Unit
+                }
+            },
+            onStop = ::stopProjectionSession,
+        )
         createNotificationChannel()
     }
 
@@ -85,6 +97,8 @@ class RecordingService : Service() {
         }.onSuccess {
             RecordingSessionStore.markStarted()
             RecordingStateStore.transition(RecordingState.Recording)
+            floatingControls?.show()
+            floatingControls?.updatePaused(false)
         }.onFailure { error ->
             recorderEngine.abort()
             RecordingSessionStore.clear()
@@ -111,6 +125,7 @@ class RecordingService : Service() {
                 RecordingSessionStore.markPaused()
                 RecordingStateStore.transition(RecordingState.Paused)
                 updateForegroundNotification(paused = true)
+                floatingControls?.updatePaused(true)
             }
             .onFailure {
                 RecordingStateStore.forceError(RecordingError.RecordingInterrupted)
@@ -126,6 +141,7 @@ class RecordingService : Service() {
                 RecordingSessionStore.markResumed()
                 RecordingStateStore.transition(RecordingState.Recording)
                 updateForegroundNotification(paused = false)
+                floatingControls?.updatePaused(false)
             }
             .onFailure {
                 RecordingStateStore.forceError(RecordingError.RecordingInterrupted)
@@ -152,6 +168,7 @@ class RecordingService : Service() {
             RecordingStateStore.forceError(RecordingError.MuxerFailure)
         }
 
+        floatingControls?.hide()
         stopForegroundAndSelf()
     }
 
@@ -174,6 +191,7 @@ class RecordingService : Service() {
         }
 
         intentionalStop = true
+        floatingControls?.hide()
         stopForegroundAndSelf()
     }
 
@@ -295,6 +313,7 @@ class RecordingService : Service() {
     }
 
     override fun onDestroy() {
+        floatingControls?.hide()
         if (recorderEngine.isActive()) {
             val saved = recorderEngine.stopAndSave()
             if (saved != null) publishSavedRecording(saved)
