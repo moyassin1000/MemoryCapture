@@ -25,6 +25,7 @@ import com.memorycapture.app.recording.RecordingStateStore
 import com.memorycapture.app.recording.SavedRecording
 import com.memorycapture.app.recording.SavedRecordingStore
 import com.memorycapture.app.recording.ScreenRecorderEngine
+import kotlin.concurrent.thread
 
 class RecordingService : Service() {
     private lateinit var projectionController: MediaProjectionController
@@ -45,6 +46,16 @@ class RecordingService : Service() {
                     is RecordingState.Paused -> resumeProjectionSession()
                     is RecordingState.Recording -> pauseProjectionSession()
                     else -> Unit
+                }
+            },
+            onScreenshot = {
+                if (RecordingStateStore.state.value is RecordingState.Recording) {
+                    thread(
+                        start = true,
+                        name = "MemoryCapture-ScreenshotAction",
+                    ) {
+                        recorderEngine.captureScreenshot()
+                    }
                 }
             },
             onHighlight = {
