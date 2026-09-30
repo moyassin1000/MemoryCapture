@@ -244,4 +244,11 @@
     <string name="microphone_connected_inputs">Connected inputs</string>
     <string name="microphone_device_selected">Preferred input</string>
 
+    <string name="professional_recording_profile">Professional recording profile</string>
+    <string name="video_bitrate">Video bitrate</string>
+    <string name="bitrate_efficient">Efficient</string>
+    <string name="bitrate_balanced">Balanced</string>
+    <string name="bitrate_high">High</string>
+    <string name="profile_compatibility_note">MemoryCapture will try the selected profile first. If the device rejects 1440p or 60 FPS, it automatically falls back to a safe compatible profile.</string>
+
 </resources>
