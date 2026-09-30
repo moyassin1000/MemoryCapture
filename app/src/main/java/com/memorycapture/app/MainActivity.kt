@@ -18,7 +18,10 @@ import com.memorycapture.app.billing.ProBillingManager
 import com.memorycapture.app.data.preferences.AppPreferences
 import com.memorycapture.app.data.preferences.AudioMode
 import com.memorycapture.app.data.preferences.ProAccent
+import com.memorycapture.app.data.preferences.RecordingFrameRate
+import com.memorycapture.app.data.preferences.RecordingQuality
 import com.memorycapture.app.data.preferences.ThemeMode
+import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.navigation.MemoryCaptureNavHost
 import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.RecordingError
@@ -155,6 +158,9 @@ class MainActivity : AppCompatActivity() {
         val storageLabel = preferences.storageLabel.first()
         val audioMode = effectiveAudioMode(preferences.audioMode.first())
         val microphoneDeviceId = preferences.microphoneDeviceId.first()
+        val recordingQuality = preferences.recordingQuality.first()
+        val recordingFrameRate = preferences.recordingFrameRate.first()
+        val videoBitratePreset = preferences.videoBitratePreset.first()
 
         val intent = Intent(this, RecordingService::class.java)
             .setAction(RecordingService.ACTION_START)
@@ -164,6 +170,9 @@ class MainActivity : AppCompatActivity() {
             .putExtra(RecordingService.EXTRA_STORAGE_LABEL, storageLabel)
             .putExtra(RecordingService.EXTRA_AUDIO_MODE, audioMode.name)
             .putExtra(RecordingService.EXTRA_MICROPHONE_DEVICE_ID, microphoneDeviceId)
+            .putExtra(RecordingService.EXTRA_RECORDING_QUALITY, recordingQuality.name)
+            .putExtra(RecordingService.EXTRA_RECORDING_FRAME_RATE, recordingFrameRate.name)
+            .putExtra(RecordingService.EXTRA_VIDEO_BITRATE_PRESET, videoBitratePreset.name)
 
         ContextCompat.startForegroundService(this, intent)
     }
