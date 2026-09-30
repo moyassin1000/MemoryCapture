@@ -27,6 +27,9 @@ class RecordingHighlightRepository(
             .apply()
     }
 
+    fun loadByUri(recordingUri: String): List<Long> =
+        parse(preferences.getString("highlights:$recordingUri", null))
+
     fun load(
         recordingUri: String?,
         displayName: String,
@@ -42,14 +45,17 @@ class RecordingHighlightRepository(
             null
         }
 
-        return (direct ?: fallback)
+        return parse(direct ?: fallback)
+    }
+
+    private fun parse(value: String?): List<Long> =
+        value
             ?.split(',')
             ?.mapNotNull { it.toLongOrNull() }
             ?.filter { it >= 0L }
             ?.distinct()
             ?.sorted()
             ?: emptyList()
-    }
 
     fun remove(
         recordingUri: String?,
