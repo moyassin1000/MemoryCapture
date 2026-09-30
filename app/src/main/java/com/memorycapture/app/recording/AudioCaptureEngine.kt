@@ -40,6 +40,9 @@ class AudioCaptureEngine(
     private var running = false
 
     @Volatile
+    private var paused = false
+
+    @Volatile
     var failure: Throwable? = null
         private set
 
@@ -148,6 +151,7 @@ class AudioCaptureEngine(
         encoder = localEncoder
         submittedFrames = 0L
         failure = null
+        paused = false
         running = true
 
         localMic?.startRecording()
@@ -168,9 +172,32 @@ class AudioCaptureEngine(
         }
     }
 
+    fun pause() {
+        if (!running || paused) return
+        paused = true
+        runCatching { microphoneRecord?.stop() }
+        runCatching { playbackRecord?.stop() }
+    }
+
+    fun resume() {
+        if (!running || !paused) return
+
+        try {
+            microphoneRecord?.startRecording()
+            playbackRecord?.startRecording()
+            paused = false
+        } catch (error: Throwable) {
+            failure = error
+            runCatching { microphoneRecord?.stop() }
+            runCatching { playbackRecord?.stop() }
+            throw error
+        }
+    }
+
     fun stopAndWait() {
         if (!running && worker == null) return
         running = false
+        paused = false
         runCatching { microphoneRecord?.stop() }
         runCatching { playbackRecord?.stop() }
 
@@ -189,6 +216,7 @@ class AudioCaptureEngine(
 
     fun abort() {
         running = false
+        paused = false
         runCatching { microphoneRecord?.stop() }
         runCatching { playbackRecord?.stop() }
         runCatching { worker?.interrupt() }
@@ -214,6 +242,11 @@ class AudioCaptureEngine(
 
         try {
             while (running && !Thread.currentThread().isInterrupted) {
+                if (paused) {
+                    Thread.sleep(PAUSE_POLL_MS)
+                    continue
+                }
+
                 val bytes = when (mode) {
                     AudioMode.None -> 0
 
@@ -497,6 +530,7 @@ class AudioCaptureEngine(
         microphoneRecord = null
         playbackRecord = null
         worker = null
+        paused = false
     }
 
     companion object {
@@ -509,6 +543,7 @@ class AudioCaptureEngine(
         private const val CODEC_TIMEOUT_US = 10_000L
         private const val STOP_JOIN_TIMEOUT_MS = 5_000L
         private const val ABORT_JOIN_TIMEOUT_MS = 1_000L
+        private const val PAUSE_POLL_MS = 20L
         private const val EOS_QUEUE_RETRIES = 100
         private const val EOS_DRAIN_IDLE_LIMIT = 100
     }
