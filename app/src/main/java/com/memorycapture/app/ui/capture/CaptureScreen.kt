@@ -117,7 +117,13 @@ fun CaptureScreen(
     val state by RecordingStateStore.state.collectAsStateWithLifecycle()
     val countdown by CountdownStore.seconds.collectAsStateWithLifecycle()
     val startedAt by RecordingSessionStore.startedAtElapsedRealtime.collectAsStateWithLifecycle()
-    val elapsed = rememberRecordingElapsed(startedAt)
+    val pausedAt by RecordingSessionStore.pausedAtElapsedRealtime.collectAsStateWithLifecycle()
+    val accumulatedPausedMs by RecordingSessionStore.accumulatedPausedMs.collectAsStateWithLifecycle()
+    val elapsed = rememberRecordingElapsed(
+        startedAt = startedAt,
+        pausedAt = pausedAt,
+        accumulatedPausedMs = accumulatedPausedMs,
+    )
 
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
