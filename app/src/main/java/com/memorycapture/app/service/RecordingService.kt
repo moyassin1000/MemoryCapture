@@ -108,6 +108,7 @@ class RecordingService : Service() {
 
         runCatching { recorderEngine.pause() }
             .onSuccess {
+                RecordingSessionStore.markPaused()
                 RecordingStateStore.transition(RecordingState.Paused)
                 updateForegroundNotification(paused = true)
             }
@@ -122,6 +123,7 @@ class RecordingService : Service() {
 
         runCatching { recorderEngine.resume() }
             .onSuccess {
+                RecordingSessionStore.markResumed()
                 RecordingStateStore.transition(RecordingState.Recording)
                 updateForegroundNotification(paused = false)
             }
