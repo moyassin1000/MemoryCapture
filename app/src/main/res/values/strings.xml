@@ -55,6 +55,11 @@
     <string name="notification_pause">Pause</string>
     <string name="notification_resume">Resume</string>
     <string name="notification_stop">Stop</string>
+    <string name="floating_controls_title">Floating recording controls</string>
+    <string name="floating_controls_enabled">Allowed to appear over other apps</string>
+    <string name="floating_controls_disabled">Overlay permission is required</string>
+    <string name="floating_controls_enable">Enable</string>
+    <string name="floating_controls_manage">Manage</string>
 
     <string name="storage_location">Save location</string>
     <string name="default_storage">Movies / MemoryCapture</string>
