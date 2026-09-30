@@ -100,6 +100,8 @@ class MainActivity : AppCompatActivity() {
             ) {
                 MemoryCaptureNavHost(
                     onRequestRecording = ::requestRecording,
+                    onPauseRecording = ::pauseRecordingService,
+                    onResumeRecording = ::resumeRecordingService,
                     onStopRecording = ::stopRecordingService,
                     onExitApp = { finishAffinity() },
                 )
@@ -179,6 +181,20 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         if (isFinishing) runCatching { ProBillingManager.close() }
         super.onDestroy()
+    }
+
+    private fun pauseRecordingService() {
+        startService(
+            Intent(this, RecordingService::class.java)
+                .setAction(RecordingService.ACTION_PAUSE),
+        )
+    }
+
+    private fun resumeRecordingService() {
+        startService(
+            Intent(this, RecordingService::class.java)
+                .setAction(RecordingService.ACTION_RESUME),
+        )
     }
 
     private fun stopRecordingService() {

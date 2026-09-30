@@ -83,7 +83,13 @@ fun HomeScreen(
     val countdown by CountdownStore.seconds.collectAsStateWithLifecycle()
     val savedRecording by SavedRecordingStore.recording.collectAsStateWithLifecycle()
     val startedAt by RecordingSessionStore.startedAtElapsedRealtime.collectAsStateWithLifecycle()
-    val elapsed = rememberRecordingElapsed(startedAt)
+    val pausedAt by RecordingSessionStore.pausedAtElapsedRealtime.collectAsStateWithLifecycle()
+    val accumulatedPausedMs by RecordingSessionStore.accumulatedPausedMs.collectAsStateWithLifecycle()
+    val elapsed = rememberRecordingElapsed(
+        startedAt = startedAt,
+        pausedAt = pausedAt,
+        accumulatedPausedMs = accumulatedPausedMs,
+    )
 
     var recordingCount by remember { mutableStateOf(0) }
     var usedStorage by remember { mutableLongStateOf(0L) }

@@ -325,10 +325,16 @@ fun CountdownDialog(
 }
 
 @Composable
-fun rememberRecordingElapsed(startedAt: Long?): String? {
-    var now by remember(startedAt) { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+fun rememberRecordingElapsed(
+    startedAt: Long?,
+    pausedAt: Long? = null,
+    accumulatedPausedMs: Long = 0L,
+): String? {
+    var now by remember(startedAt, pausedAt, accumulatedPausedMs) {
+        mutableLongStateOf(SystemClock.elapsedRealtime())
+    }
 
-    LaunchedEffect(startedAt) {
+    LaunchedEffect(startedAt, pausedAt, accumulatedPausedMs) {
         if (startedAt == null) return@LaunchedEffect
         while (true) {
             now = SystemClock.elapsedRealtime()
@@ -337,7 +343,10 @@ fun rememberRecordingElapsed(startedAt: Long?): String? {
     }
 
     if (startedAt == null) return null
-    val seconds = ((now - startedAt) / 1000L).coerceAtLeast(0)
+    val currentPauseMs = pausedAt?.let { (now - it).coerceAtLeast(0L) } ?: 0L
+    val activeMs =
+        (now - startedAt - accumulatedPausedMs - currentPauseMs).coerceAtLeast(0L)
+    val seconds = activeMs / 1000L
     val hours = seconds / 3600
     val minutes = (seconds % 3600) / 60
     val secs = seconds % 60

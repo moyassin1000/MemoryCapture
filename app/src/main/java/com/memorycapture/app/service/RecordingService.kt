@@ -25,18 +25,32 @@ import com.memorycapture.app.recording.ScreenRecorderEngine
 class RecordingService : Service() {
     private lateinit var projectionController: MediaProjectionController
     private lateinit var recorderEngine: ScreenRecorderEngine
+    private var floatingControls: FloatingRecordingControls? = null
     private var intentionalStop = false
 
     override fun onCreate() {
         super.onCreate()
         projectionController = MediaProjectionController(this)
         recorderEngine = ScreenRecorderEngine(this)
+        floatingControls = FloatingRecordingControls(
+            context = this,
+            onPauseResume = {
+                when (RecordingStateStore.state.value) {
+                    is RecordingState.Paused -> resumeProjectionSession()
+                    is RecordingState.Recording -> pauseProjectionSession()
+                    else -> Unit
+                }
+            },
+            onStop = ::stopProjectionSession,
+        )
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> startProjectionSession(intent)
+            ACTION_PAUSE -> pauseProjectionSession()
+            ACTION_RESUME -> resumeProjectionSession()
             ACTION_STOP -> stopProjectionSession()
         }
         return START_NOT_STICKY
@@ -83,6 +97,8 @@ class RecordingService : Service() {
         }.onSuccess {
             RecordingSessionStore.markStarted()
             RecordingStateStore.transition(RecordingState.Recording)
+            floatingControls?.show()
+            floatingControls?.updatePaused(false)
         }.onFailure { error ->
             recorderEngine.abort()
             RecordingSessionStore.clear()
@@ -99,6 +115,38 @@ class RecordingService : Service() {
             RecordingStateStore.forceError(reason)
             stopForegroundAndSelf()
         }
+    }
+
+    private fun pauseProjectionSession() {
+        if (RecordingStateStore.state.value !is RecordingState.Recording) return
+
+        runCatching { recorderEngine.pause() }
+            .onSuccess {
+                RecordingSessionStore.markPaused()
+                RecordingStateStore.transition(RecordingState.Paused)
+                updateForegroundNotification(paused = true)
+                floatingControls?.updatePaused(true)
+            }
+            .onFailure {
+                RecordingStateStore.forceError(RecordingError.RecordingInterrupted)
+                stopForegroundAndSelf()
+            }
+    }
+
+    private fun resumeProjectionSession() {
+        if (RecordingStateStore.state.value !is RecordingState.Paused) return
+
+        runCatching { recorderEngine.resume() }
+            .onSuccess {
+                RecordingSessionStore.markResumed()
+                RecordingStateStore.transition(RecordingState.Recording)
+                updateForegroundNotification(paused = false)
+                floatingControls?.updatePaused(false)
+            }
+            .onFailure {
+                RecordingStateStore.forceError(RecordingError.RecordingInterrupted)
+                stopForegroundAndSelf()
+            }
     }
 
     private fun stopProjectionSession() {
@@ -120,6 +168,7 @@ class RecordingService : Service() {
             RecordingStateStore.forceError(RecordingError.MuxerFailure)
         }
 
+        floatingControls?.hide()
         stopForegroundAndSelf()
     }
 
@@ -142,6 +191,7 @@ class RecordingService : Service() {
         }
 
         intentionalStop = true
+        floatingControls?.hide()
         stopForegroundAndSelf()
     }
 
@@ -159,21 +209,10 @@ class RecordingService : Service() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val stopIntent = PendingIntent.getService(
-            this,
-            1,
-            Intent(this, RecordingService::class.java).setAction(ACTION_STOP),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        val notification = buildNotification(
+            openApp = openApp,
+            paused = false,
         )
-
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(getString(R.string.notification_title))
-            .setContentText(getString(R.string.notification_text))
-            .setOngoing(true)
-            .setContentIntent(openApp)
-            .addAction(0, getString(R.string.notification_stop), stopIntent)
-            .build()
 
         val serviceType =
             if (
@@ -194,6 +233,67 @@ class RecordingService : Service() {
         )
     }
 
+    private fun updateForegroundNotification(paused: Boolean) {
+        val openApp = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+        getSystemService(NotificationManager::class.java).notify(
+            NOTIFICATION_ID,
+            buildNotification(openApp = openApp, paused = paused),
+        )
+    }
+
+    private fun buildNotification(
+        openApp: PendingIntent,
+        paused: Boolean,
+    ) = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setSmallIcon(R.drawable.ic_launcher_foreground)
+        .setContentTitle(
+            getString(
+                if (paused) R.string.notification_title_paused
+                else R.string.notification_title,
+            ),
+        )
+        .setContentText(
+            getString(
+                if (paused) R.string.notification_text_paused
+                else R.string.notification_text,
+            ),
+        )
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setContentIntent(openApp)
+        .addAction(
+            0,
+            getString(
+                if (paused) R.string.notification_resume
+                else R.string.notification_pause,
+            ),
+            PendingIntent.getService(
+                this,
+                2,
+                Intent(this, RecordingService::class.java).setAction(
+                    if (paused) ACTION_RESUME else ACTION_PAUSE,
+                ),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            ),
+        )
+        .addAction(
+            0,
+            getString(R.string.notification_stop),
+            PendingIntent.getService(
+                this,
+                1,
+                Intent(this, RecordingService::class.java).setAction(ACTION_STOP),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            ),
+        )
+        .build()
+
     private fun createNotificationChannel() {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
@@ -213,6 +313,7 @@ class RecordingService : Service() {
     }
 
     override fun onDestroy() {
+        floatingControls?.hide()
         if (recorderEngine.isActive()) {
             val saved = recorderEngine.stopAndSave()
             if (saved != null) publishSavedRecording(saved)
@@ -227,6 +328,8 @@ class RecordingService : Service() {
 
     companion object {
         const val ACTION_START = "com.memorycapture.app.action.START"
+        const val ACTION_PAUSE = "com.memorycapture.app.action.PAUSE"
+        const val ACTION_RESUME = "com.memorycapture.app.action.RESUME"
         const val ACTION_STOP = "com.memorycapture.app.action.STOP"
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_RESULT_DATA = "result_data"

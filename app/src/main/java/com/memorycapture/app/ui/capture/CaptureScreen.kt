@@ -5,6 +5,8 @@ import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -117,7 +119,13 @@ fun CaptureScreen(
     val state by RecordingStateStore.state.collectAsStateWithLifecycle()
     val countdown by CountdownStore.seconds.collectAsStateWithLifecycle()
     val startedAt by RecordingSessionStore.startedAtElapsedRealtime.collectAsStateWithLifecycle()
-    val elapsed = rememberRecordingElapsed(startedAt)
+    val pausedAt by RecordingSessionStore.pausedAtElapsedRealtime.collectAsStateWithLifecycle()
+    val accumulatedPausedMs by RecordingSessionStore.accumulatedPausedMs.collectAsStateWithLifecycle()
+    val elapsed = rememberRecordingElapsed(
+        startedAt = startedAt,
+        pausedAt = pausedAt,
+        accumulatedPausedMs = accumulatedPausedMs,
+    )
 
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
@@ -287,6 +295,38 @@ fun CaptureScreen(
                             }
                         },
                     )
+                }
+
+                item {
+                    val overlayGranted = Settings.canDrawOverlays(context)
+                    CaptureOptionCard(
+                        icon = Icons.Default.AllInclusive,
+                        title = stringResource(R.string.floating_controls_title),
+                        value = if (overlayGranted) {
+                            stringResource(R.string.floating_controls_enabled)
+                        } else {
+                            stringResource(R.string.floating_controls_disabled)
+                        },
+                    ) {
+                        OutlinedButton(
+                            enabled = !active && !busy,
+                            onClick = {
+                                val intent = Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${context.packageName}"),
+                                )
+                                context.startActivity(intent)
+                            },
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (overlayGranted) R.string.floating_controls_manage
+                                    else R.string.floating_controls_enable,
+                                ),
+                            )
+                        }
+                    }
+                    // floating controls permission
                 }
 
                 item {

@@ -40,11 +40,33 @@ object RecordingSessionStore {
     private val mutableStartedAt = MutableStateFlow<Long?>(null)
     val startedAtElapsedRealtime: StateFlow<Long?> = mutableStartedAt.asStateFlow()
 
+    private val mutablePausedAt = MutableStateFlow<Long?>(null)
+    val pausedAtElapsedRealtime: StateFlow<Long?> = mutablePausedAt.asStateFlow()
+
+    private val mutableAccumulatedPausedMs = MutableStateFlow(0L)
+    val accumulatedPausedMs: StateFlow<Long> = mutableAccumulatedPausedMs.asStateFlow()
+
     fun markStarted() {
         mutableStartedAt.value = SystemClock.elapsedRealtime()
+        mutablePausedAt.value = null
+        mutableAccumulatedPausedMs.value = 0L
+    }
+
+    fun markPaused() {
+        if (mutableStartedAt.value == null || mutablePausedAt.value != null) return
+        mutablePausedAt.value = SystemClock.elapsedRealtime()
+    }
+
+    fun markResumed() {
+        val pausedAt = mutablePausedAt.value ?: return
+        mutableAccumulatedPausedMs.value +=
+            (SystemClock.elapsedRealtime() - pausedAt).coerceAtLeast(0L)
+        mutablePausedAt.value = null
     }
 
     fun clear() {
         mutableStartedAt.value = null
+        mutablePausedAt.value = null
+        mutableAccumulatedPausedMs.value = 0L
     }
 }

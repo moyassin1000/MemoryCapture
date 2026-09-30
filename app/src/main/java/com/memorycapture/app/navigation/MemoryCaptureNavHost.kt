@@ -63,6 +63,8 @@ import com.memorycapture.app.ui.updates.UpdateCenterScreen
 @Composable
 fun MemoryCaptureNavHost(
     onRequestRecording: () -> Unit,
+    onPauseRecording: () -> Unit,
+    onResumeRecording: () -> Unit,
     onStopRecording: () -> Unit,
     onExitApp: () -> Unit,
 ) {
@@ -71,8 +73,16 @@ fun MemoryCaptureNavHost(
     val currentRoute = backStackEntry?.destination?.route
     val recordingState by RecordingStateStore.state.collectAsStateWithLifecycle()
     val startedAt by RecordingSessionStore.startedAtElapsedRealtime.collectAsStateWithLifecycle()
-    val elapsed = rememberRecordingElapsed(startedAt)
-    val recordingActive = recordingState is RecordingState.Recording || recordingState is RecordingState.Paused
+    val pausedAt by RecordingSessionStore.pausedAtElapsedRealtime.collectAsStateWithLifecycle()
+    val accumulatedPausedMs by RecordingSessionStore.accumulatedPausedMs.collectAsStateWithLifecycle()
+    val elapsed = rememberRecordingElapsed(
+        startedAt = startedAt,
+        pausedAt = pausedAt,
+        accumulatedPausedMs = accumulatedPausedMs,
+    )
+    val recordingPaused = recordingState is RecordingState.Paused
+    val recordingActive =
+        recordingState is RecordingState.Recording || recordingPaused
 
     val dockRoutes = setOf(
         AppDestination.Home.route,
@@ -251,8 +261,18 @@ fun MemoryCaptureNavHost(
                 ) {
                     GlobalRecordingPill(
                         elapsed = elapsed,
-                        label = stringResource(R.string.status_recording),
+                        label = stringResource(
+                            if (recordingPaused) R.string.status_paused
+                            else R.string.status_recording,
+                        ),
+                        paused = recordingPaused,
+                        pauseLabel = stringResource(R.string.notification_pause),
+                        resumeLabel = stringResource(R.string.notification_resume),
                         stopLabel = stringResource(R.string.notification_stop),
+                        onPauseResume = {
+                            if (recordingPaused) onResumeRecording()
+                            else onPauseRecording()
+                        },
                         onStop = onStopRecording,
                     )
                 }

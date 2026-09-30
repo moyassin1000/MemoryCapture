@@ -60,7 +60,10 @@ class ScreenRecorderEngine(
     private var pendingBytes = 0
     private var firstVideoPtsUs = -1L
     private var firstAudioPtsUs = -1L
+    private var totalVideoPausedUs = 0L
+    private var pauseStartedNs = 0L
     private var started = false
+    private var paused = false
 
     fun start(
         projection: MediaProjection,
@@ -115,6 +118,7 @@ class ScreenRecorderEngine(
             outputHandle = output
             drainFailure = null
             abortDrain = false
+            paused = false
             started = true
 
             drainThread = thread(
@@ -190,8 +194,44 @@ class ScreenRecorderEngine(
         }
     }
 
+    fun pause() {
+        if (!started || paused) return
+
+        virtualDisplay?.surface = null
+        audioCaptureEngine?.pause()
+        pauseStartedNs = System.nanoTime()
+        paused = true
+    }
+
+    fun resume() {
+        if (!started || !paused) return
+
+        val pausedUs = if (pauseStartedNs > 0L) {
+            (System.nanoTime() - pauseStartedNs).coerceAtLeast(0L) / 1_000L
+        } else {
+            0L
+        }
+
+        virtualDisplay?.surface = inputSurface
+        audioCaptureEngine?.resume()
+        totalVideoPausedUs += pausedUs
+        pauseStartedNs = 0L
+        paused = false
+    }
+
     fun stopAndSave(): SavedRecording? {
         if (!started) return null
+
+        if (paused) {
+            val pausedUs = if (pauseStartedNs > 0L) {
+                (System.nanoTime() - pauseStartedNs).coerceAtLeast(0L) / 1_000L
+            } else {
+                0L
+            }
+            totalVideoPausedUs += pausedUs
+            pauseStartedNs = 0L
+            paused = false
+        }
 
         val activeEncoder = encoder
         val activeSurface = inputSurface
@@ -202,6 +242,7 @@ class ScreenRecorderEngine(
         val activeDrainThread = drainThread
 
         started = false
+        paused = false
 
         var stoppedCleanly = true
 
@@ -282,6 +323,8 @@ class ScreenRecorderEngine(
         val activeDrainThread = drainThread
 
         started = false
+        paused = false
+        pauseStartedNs = 0L
         abortDrain = true
 
         runCatching { activeDisplay?.release() }
@@ -490,7 +533,9 @@ class ScreenRecorderEngine(
         val first = when (kind) {
             TrackKind.Video -> {
                 if (firstVideoPtsUs < 0L) firstVideoPtsUs = presentationTimeUs
-                firstVideoPtsUs
+                val base = firstVideoPtsUs
+                return (presentationTimeUs - base - totalVideoPausedUs)
+                    .coerceAtLeast(0L)
             }
             TrackKind.Audio -> {
                 if (firstAudioPtsUs < 0L) firstAudioPtsUs = presentationTimeUs
@@ -510,6 +555,8 @@ class ScreenRecorderEngine(
             pendingBytes = 0
             firstVideoPtsUs = -1L
             firstAudioPtsUs = -1L
+            totalVideoPausedUs = 0L
+            pauseStartedNs = 0L
         }
     }
 
@@ -679,6 +726,7 @@ class ScreenRecorderEngine(
         audioCaptureEngine = null
         drainFailure = null
         abortDrain = false
+        paused = false
         resetMuxerState(1)
     }
 
