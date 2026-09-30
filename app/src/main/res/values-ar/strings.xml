@@ -250,6 +250,7 @@
     <string name="bitrate_balanced">متوازن</string>
     <string name="bitrate_high">عالي</string>
     <string name="profile_compatibility_note">سيحاول MemoryCapture استخدام الإعدادات المختارة، وإذا رفض الجهاز 1440p أو 60 إطار/ث فسيعود تلقائيًا إلى إعداد متوافق وآمن.</string>
+    <string name="floating_screenshot">📸 لقطة</string>
     <string name="floating_highlight">⭐ علامة</string>
     <string name="highlights">اللحظات المهمة</string>
     <string name="highlight_number_time">علامة %1$d • %2$s</string>
