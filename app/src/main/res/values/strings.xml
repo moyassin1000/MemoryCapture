@@ -50,6 +50,10 @@
     <string name="notification_channel_description">Shows controls while MemoryCapture is recording.</string>
     <string name="notification_title">MemoryCapture is recording</string>
     <string name="notification_text">Your screen video is being recorded.</string>
+    <string name="notification_title_paused">Recording paused</string>
+    <string name="notification_text_paused">Capture is paused and can be resumed safely.</string>
+    <string name="notification_pause">Pause</string>
+    <string name="notification_resume">Resume</string>
     <string name="notification_stop">Stop</string>
 
     <string name="storage_location">Save location</string>
