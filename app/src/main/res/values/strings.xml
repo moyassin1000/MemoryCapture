@@ -253,6 +253,7 @@
     <string name="floating_screenshot">📸 Screenshot</string>
     <string name="floating_highlight">⭐ Highlight</string>
     <string name="highlights">Highlights</string>
+    <string name="highlights_count">%1$d saved highlights</string>
     <string name="highlight_number_time">Highlight %1$d • %2$s</string>
 
 </resources>
