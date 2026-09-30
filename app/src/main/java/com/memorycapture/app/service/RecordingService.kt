@@ -12,6 +12,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.memorycapture.app.MainActivity
 import com.memorycapture.app.data.preferences.AudioMode
+import com.memorycapture.app.data.preferences.RecordingFrameRate
+import com.memorycapture.app.data.preferences.RecordingQuality
+import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.R
 import com.memorycapture.app.projection.MediaProjectionController
 import com.memorycapture.app.recording.RecordingError
@@ -77,6 +80,27 @@ class RecordingService : Service() {
             )
         }.getOrDefault(AudioMode.None)
 
+        val recordingQuality = runCatching {
+            RecordingQuality.valueOf(
+                intent.getStringExtra(EXTRA_RECORDING_QUALITY)
+                    ?: RecordingQuality.P1080.name,
+            )
+        }.getOrDefault(RecordingQuality.P1080)
+
+        val recordingFrameRate = runCatching {
+            RecordingFrameRate.valueOf(
+                intent.getStringExtra(EXTRA_RECORDING_FRAME_RATE)
+                    ?: RecordingFrameRate.Fps30.name,
+            )
+        }.getOrDefault(RecordingFrameRate.Fps30)
+
+        val videoBitratePreset = runCatching {
+            VideoBitratePreset.valueOf(
+                intent.getStringExtra(EXTRA_VIDEO_BITRATE_PRESET)
+                    ?: VideoBitratePreset.Balanced.name,
+            )
+        }.getOrDefault(VideoBitratePreset.Balanced)
+
         startAsForeground(audioMode)
         intentionalStop = false
 
@@ -93,6 +117,9 @@ class RecordingService : Service() {
                     EXTRA_MICROPHONE_DEVICE_ID,
                     -1,
                 ),
+                quality = recordingQuality,
+                frameRate = recordingFrameRate,
+                bitratePreset = videoBitratePreset,
             )
         }.onSuccess {
             RecordingSessionStore.markStarted()
@@ -337,6 +364,9 @@ class RecordingService : Service() {
         const val EXTRA_STORAGE_LABEL = "storage_label"
         const val EXTRA_AUDIO_MODE = "audio_mode"
         const val EXTRA_MICROPHONE_DEVICE_ID = "microphone_device_id"
+        const val EXTRA_RECORDING_QUALITY = "recording_quality"
+        const val EXTRA_RECORDING_FRAME_RATE = "recording_frame_rate"
+        const val EXTRA_VIDEO_BITRATE_PRESET = "video_bitrate_preset"
         private const val CHANNEL_ID = "recording"
         private const val NOTIFICATION_ID = 1001
     }
