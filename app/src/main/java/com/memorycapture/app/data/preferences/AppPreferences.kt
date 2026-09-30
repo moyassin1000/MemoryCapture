@@ -33,6 +33,24 @@ enum class AudioMode {
     DeviceAndMic,
 }
 
+enum class RecordingQuality {
+    Auto,
+    P720,
+    P1080,
+    P1440,
+}
+
+enum class RecordingFrameRate(val fps: Int) {
+    Fps30(30),
+    Fps60(60),
+}
+
+enum class VideoBitratePreset {
+    Efficient,
+    Balanced,
+    High,
+}
+
 class AppPreferences(
     private val context: Context,
 ) {
@@ -86,6 +104,33 @@ class AppPreferences(
         it[KEY_MICROPHONE_DEVICE_ID] ?: -1
     }
 
+    val recordingQuality: Flow<RecordingQuality> =
+        context.memoryCaptureDataStore.data.map { preferences ->
+            runCatching {
+                RecordingQuality.valueOf(
+                    preferences[KEY_RECORDING_QUALITY] ?: RecordingQuality.P1080.name,
+                )
+            }.getOrDefault(RecordingQuality.P1080)
+        }
+
+    val recordingFrameRate: Flow<RecordingFrameRate> =
+        context.memoryCaptureDataStore.data.map { preferences ->
+            runCatching {
+                RecordingFrameRate.valueOf(
+                    preferences[KEY_RECORDING_FRAME_RATE] ?: RecordingFrameRate.Fps30.name,
+                )
+            }.getOrDefault(RecordingFrameRate.Fps30)
+        }
+
+    val videoBitratePreset: Flow<VideoBitratePreset> =
+        context.memoryCaptureDataStore.data.map { preferences ->
+            runCatching {
+                VideoBitratePreset.valueOf(
+                    preferences[KEY_VIDEO_BITRATE_PRESET] ?: VideoBitratePreset.Balanced.name,
+                )
+            }.getOrDefault(VideoBitratePreset.Balanced)
+        }
+
     suspend fun setThemeMode(mode: ThemeMode) {
         context.memoryCaptureDataStore.edit { it[KEY_THEME] = mode.name }
     }
@@ -134,6 +179,18 @@ class AppPreferences(
         context.memoryCaptureDataStore.edit { it[KEY_MICROPHONE_DEVICE_ID] = deviceId }
     }
 
+    suspend fun setRecordingQuality(quality: RecordingQuality) {
+        context.memoryCaptureDataStore.edit { it[KEY_RECORDING_QUALITY] = quality.name }
+    }
+
+    suspend fun setRecordingFrameRate(frameRate: RecordingFrameRate) {
+        context.memoryCaptureDataStore.edit { it[KEY_RECORDING_FRAME_RATE] = frameRate.name }
+    }
+
+    suspend fun setVideoBitratePreset(preset: VideoBitratePreset) {
+        context.memoryCaptureDataStore.edit { it[KEY_VIDEO_BITRATE_PRESET] = preset.name }
+    }
+
     suspend fun toggleFavoriteRecording(uri: String) {
         context.memoryCaptureDataStore.edit { preferences ->
             val current = preferences[KEY_FAVORITE_RECORDINGS] ?: emptySet()
@@ -163,5 +220,8 @@ class AppPreferences(
         private val KEY_PRO_ACCENT = stringPreferencesKey("pro_accent")
         private val KEY_AUDIO_MODE = stringPreferencesKey("audio_mode")
         private val KEY_MICROPHONE_DEVICE_ID = intPreferencesKey("microphone_device_id")
+        private val KEY_RECORDING_QUALITY = stringPreferencesKey("recording_quality")
+        private val KEY_RECORDING_FRAME_RATE = stringPreferencesKey("recording_frame_rate")
+        private val KEY_VIDEO_BITRATE_PRESET = stringPreferencesKey("video_bitrate_preset")
     }
 }

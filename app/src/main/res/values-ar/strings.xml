@@ -244,4 +244,11 @@
     <string name="microphone_connected_inputs">مداخل الصوت المتصلة</string>
     <string name="microphone_device_selected">مدخل مفضّل</string>
 
+    <string name="professional_recording_profile">ملف تسجيل احترافي</string>
+    <string name="video_bitrate">معدل البت للفيديو</string>
+    <string name="bitrate_efficient">موفّر</string>
+    <string name="bitrate_balanced">متوازن</string>
+    <string name="bitrate_high">عالي</string>
+    <string name="profile_compatibility_note">سيحاول MemoryCapture استخدام الإعدادات المختارة، وإذا رفض الجهاز 1440p أو 60 إطار/ث فسيعود تلقائيًا إلى إعداد متوافق وآمن.</string>
+
 </resources>

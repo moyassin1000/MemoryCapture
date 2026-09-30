@@ -18,6 +18,9 @@ import android.provider.MediaStore
 import android.view.Surface
 import androidx.documentfile.provider.DocumentFile
 import com.memorycapture.app.data.preferences.AudioMode
+import com.memorycapture.app.data.preferences.RecordingFrameRate
+import com.memorycapture.app.data.preferences.RecordingQuality
+import com.memorycapture.app.data.preferences.VideoBitratePreset
 import java.io.File
 import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
@@ -71,11 +74,20 @@ class ScreenRecorderEngine(
         customStorageLabel: String? = null,
         audioMode: AudioMode = AudioMode.None,
         preferredMicDeviceId: Int = -1,
+        quality: RecordingQuality = RecordingQuality.P1080,
+        frameRate: RecordingFrameRate = RecordingFrameRate.Fps30,
+        bitratePreset: VideoBitratePreset = VideoBitratePreset.Balanced,
     ) {
         check(!started) { "A recording session is already active." }
 
         val metrics = context.resources.displayMetrics
-        val (width, height) = scaledEvenSize(metrics.widthPixels, metrics.heightPixels)
+        val sourceWidth = metrics.widthPixels
+        val sourceHeight = metrics.heightPixels
+        val preferredSize = scaledEvenSizeForQuality(
+            sourceWidth = sourceWidth,
+            sourceHeight = sourceHeight,
+            quality = quality,
+        )
         val output = createOutput(customTreeUri, customStorageLabel)
 
         var localEncoder: MediaCodec? = null
@@ -89,25 +101,40 @@ class ScreenRecorderEngine(
                 trackCount = if (audioMode == AudioMode.None) 1 else 2,
             )
 
-            val format = MediaFormat.createVideoFormat(MIME_TYPE, width, height).apply {
-                setInteger(
-                    MediaFormat.KEY_COLOR_FORMAT,
-                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface,
-                )
-                setInteger(MediaFormat.KEY_BIT_RATE, VIDEO_BIT_RATE)
-                setInteger(MediaFormat.KEY_FRAME_RATE, VIDEO_FRAME_RATE)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL_SECONDS)
-            }
+            val preferredProfile = EncoderProfile(
+                width = preferredSize.first,
+                height = preferredSize.second,
+                frameRate = frameRate.fps,
+                bitRate = calculateVideoBitrate(
+                    width = preferredSize.first,
+                    height = preferredSize.second,
+                    frameRate = frameRate.fps,
+                    preset = bitratePreset,
+                ),
+            )
+            val fallbackSize = scaledEvenSizeForQuality(
+                sourceWidth = sourceWidth,
+                sourceHeight = sourceHeight,
+                quality = RecordingQuality.P1080,
+            )
+            val fallbackProfile = EncoderProfile(
+                width = fallbackSize.first,
+                height = fallbackSize.second,
+                frameRate = RecordingFrameRate.Fps30.fps,
+                bitRate = calculateVideoBitrate(
+                    width = fallbackSize.first,
+                    height = fallbackSize.second,
+                    frameRate = RecordingFrameRate.Fps30.fps,
+                    preset = VideoBitratePreset.Balanced,
+                ),
+            )
 
-            localEncoder = MediaCodec.createEncoderByType(MIME_TYPE).apply {
-                configure(
-                    format,
-                    null,
-                    null,
-                    MediaCodec.CONFIGURE_FLAG_ENCODE,
-                )
-            }
-
+            val configured = createConfiguredVideoEncoder(
+                preferred = preferredProfile,
+                fallback = fallbackProfile,
+            )
+            localEncoder = configured.codec
+            val activeProfile = configured.profile
             localSurface = localEncoder.createInputSurface()
             localMuxer = createMuxer(output)
             localEncoder.start()
@@ -162,8 +189,8 @@ class ScreenRecorderEngine(
 
             localDisplay = projection.createVirtualDisplay(
                 "MemoryCapture",
-                width,
-                height,
+                activeProfile.width,
+                activeProfile.height,
                 metrics.densityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 localSurface,
@@ -696,16 +723,20 @@ class ScreenRecorderEngine(
         }
     }
 
-    private fun scaledEvenSize(
+    private fun scaledEvenSizeForQuality(
         sourceWidth: Int,
         sourceHeight: Int,
+        quality: RecordingQuality,
     ): Pair<Int, Int> {
-        val longest = maxOf(sourceWidth, sourceHeight)
-        val scale = if (longest > MAX_LONG_EDGE) {
-            MAX_LONG_EDGE.toFloat() / longest.toFloat()
-        } else {
-            1f
+        val requestedLongEdge = when (quality) {
+            RecordingQuality.Auto -> minOf(maxOf(sourceWidth, sourceHeight), 1920)
+            RecordingQuality.P720 -> 1280
+            RecordingQuality.P1080 -> 1920
+            RecordingQuality.P1440 -> 2560
         }
+        val longest = maxOf(sourceWidth, sourceHeight)
+        val targetLongEdge = minOf(longest, requestedLongEdge)
+        val scale = targetLongEdge.toFloat() / longest.toFloat()
 
         var width = (sourceWidth * scale).toInt().coerceAtLeast(2)
         var height = (sourceHeight * scale).toInt().coerceAtLeast(2)
@@ -714,6 +745,74 @@ class ScreenRecorderEngine(
         if (height % 2 != 0) height -= 1
 
         return width to height
+    }
+
+    private fun calculateVideoBitrate(
+        width: Int,
+        height: Int,
+        frameRate: Int,
+        preset: VideoBitratePreset,
+    ): Int {
+        val pixelsPerSecond = width.toLong() * height.toLong() * frameRate.toLong()
+        val bitsPerPixel = when (preset) {
+            VideoBitratePreset.Efficient -> 0.055
+            VideoBitratePreset.Balanced -> 0.085
+            VideoBitratePreset.High -> 0.12
+        }
+        return (pixelsPerSecond * bitsPerPixel)
+            .toLong()
+            .coerceIn(MIN_VIDEO_BIT_RATE.toLong(), MAX_VIDEO_BIT_RATE.toLong())
+            .toInt()
+    }
+
+    private fun createConfiguredVideoEncoder(
+        preferred: EncoderProfile,
+        fallback: EncoderProfile,
+    ): ConfiguredEncoder {
+        val attempts = if (preferred == fallback) {
+            listOf(preferred)
+        } else {
+            listOf(preferred, fallback)
+        }
+
+        var lastError: Throwable? = null
+        attempts.forEach { profile ->
+            val codec = runCatching { MediaCodec.createEncoderByType(MIME_TYPE) }
+                .getOrElse {
+                    lastError = it
+                    return@forEach
+                }
+            val format = MediaFormat.createVideoFormat(
+                MIME_TYPE,
+                profile.width,
+                profile.height,
+            ).apply {
+                setInteger(
+                    MediaFormat.KEY_COLOR_FORMAT,
+                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface,
+                )
+                setInteger(MediaFormat.KEY_BIT_RATE, profile.bitRate)
+                setInteger(MediaFormat.KEY_FRAME_RATE, profile.frameRate)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL_SECONDS)
+            }
+
+            val configured = runCatching {
+                codec.configure(
+                    format,
+                    null,
+                    null,
+                    MediaCodec.CONFIGURE_FLAG_ENCODE,
+                )
+            }
+            if (configured.isSuccess) {
+                return ConfiguredEncoder(codec = codec, profile = profile)
+            }
+
+            lastError = configured.exceptionOrNull()
+            runCatching { codec.release() }
+        }
+
+        throw lastError ?: IllegalStateException("Unable to configure video encoder.")
     }
 
     private fun clearRuntimeState() {
@@ -742,6 +841,18 @@ class ScreenRecorderEngine(
         val flags: Int,
     )
 
+    private data class EncoderProfile(
+        val width: Int,
+        val height: Int,
+        val frameRate: Int,
+        val bitRate: Int,
+    )
+
+    private data class ConfiguredEncoder(
+        val codec: MediaCodec,
+        val profile: EncoderProfile,
+    )
+
     private data class OutputHandle(
         val displayName: String,
         val uri: Uri?,
@@ -753,10 +864,9 @@ class ScreenRecorderEngine(
 
     companion object {
         private const val MIME_TYPE = "video/avc"
-        private const val VIDEO_BIT_RATE = 8_000_000
-        private const val VIDEO_FRAME_RATE = 30
         private const val I_FRAME_INTERVAL_SECONDS = 1
-        private const val MAX_LONG_EDGE = 1920
+        private const val MIN_VIDEO_BIT_RATE = 2_500_000
+        private const val MAX_VIDEO_BIT_RATE = 28_000_000
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 8_000L
         private const val DRAIN_ABORT_JOIN_TIMEOUT_MS = 1_500L

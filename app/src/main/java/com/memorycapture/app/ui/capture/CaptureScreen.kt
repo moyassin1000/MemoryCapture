@@ -61,6 +61,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.memorycapture.app.R
 import com.memorycapture.app.data.preferences.AppPreferences
 import com.memorycapture.app.data.preferences.AudioMode
+import com.memorycapture.app.data.preferences.RecordingFrameRate
+import com.memorycapture.app.data.preferences.RecordingQuality
+import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.RecordingSessionStore
 import com.memorycapture.app.recording.RecordingState
@@ -87,6 +90,15 @@ fun CaptureScreen(
     )
     val microphoneDeviceId by preferences.microphoneDeviceId.collectAsStateWithLifecycle(
         initialValue = -1,
+    )
+    val recordingQuality by preferences.recordingQuality.collectAsStateWithLifecycle(
+        initialValue = RecordingQuality.P1080,
+    )
+    val recordingFrameRate by preferences.recordingFrameRate.collectAsStateWithLifecycle(
+        initialValue = RecordingFrameRate.Fps30,
+    )
+    val videoBitratePreset by preferences.videoBitratePreset.collectAsStateWithLifecycle(
+        initialValue = VideoBitratePreset.Balanced,
     )
     val audioManager = remember {
         context.getSystemService(AudioManager::class.java)
@@ -241,11 +253,11 @@ fun CaptureScreen(
                             ) {
                                 ProfilePill(
                                     icon = Icons.Default.HighQuality,
-                                    text = "1080p",
+                                    text = qualityShortLabel(recordingQuality),
                                 )
                                 ProfilePill(
                                     icon = Icons.Default.Speed,
-                                    text = "30 FPS",
+                                    text = frameRateShortLabel(recordingFrameRate),
                                 )
                                 ProfilePill(
                                     icon = Icons.Default.GraphicEq,
@@ -353,18 +365,20 @@ fun CaptureScreen(
                 }
 
                 item {
-                    CaptureOptionCard(
-                        icon = Icons.Default.HighQuality,
-                        title = stringResource(R.string.quality),
-                        value = stringResource(R.string.quality_1080p),
-                    )
-                }
-
-                item {
-                    CaptureOptionCard(
-                        icon = Icons.Default.Speed,
-                        title = stringResource(R.string.frame_rate),
-                        value = stringResource(R.string.fps_30),
+                    RecordingProfileCard(
+                        quality = recordingQuality,
+                        frameRate = recordingFrameRate,
+                        bitratePreset = videoBitratePreset,
+                        enabled = !active && !busy,
+                        onQualitySelect = { quality ->
+                            scope.launch { preferences.setRecordingQuality(quality) }
+                        },
+                        onFrameRateSelect = { frameRate ->
+                            scope.launch { preferences.setRecordingFrameRate(frameRate) }
+                        },
+                        onBitrateSelect = { preset ->
+                            scope.launch { preferences.setVideoBitratePreset(preset) }
+                        },
                     )
                 }
 
@@ -396,6 +410,186 @@ fun CaptureScreen(
         }
     }
 }
+
+@Composable
+private fun RecordingProfileCard(
+    quality: RecordingQuality,
+    frameRate: RecordingFrameRate,
+    bitratePreset: VideoBitratePreset,
+    enabled: Boolean,
+    onQualitySelect: (RecordingQuality) -> Unit,
+    onFrameRateSelect: (RecordingFrameRate) -> Unit,
+    onBitrateSelect: (VideoBitratePreset) -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(14.dp, MaterialTheme.shapes.large),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.professional_recording_profile),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black,
+            )
+
+            Text(
+                text = stringResource(R.string.quality),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                RecordingChoice(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.quality_auto),
+                    selected = quality == RecordingQuality.Auto,
+                    enabled = enabled,
+                    onClick = { onQualitySelect(RecordingQuality.Auto) },
+                )
+                RecordingChoice(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.quality_720p),
+                    selected = quality == RecordingQuality.P720,
+                    enabled = enabled,
+                    onClick = { onQualitySelect(RecordingQuality.P720) },
+                )
+                RecordingChoice(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.quality_1080p),
+                    selected = quality == RecordingQuality.P1080,
+                    enabled = enabled,
+                    onClick = { onQualitySelect(RecordingQuality.P1080) },
+                )
+                RecordingChoice(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.quality_1440p),
+                    selected = quality == RecordingQuality.P1440,
+                    enabled = enabled,
+                    onClick = { onQualitySelect(RecordingQuality.P1440) },
+                )
+            }
+
+            Text(
+                text = stringResource(R.string.frame_rate),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                RecordingChoice(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.fps_30),
+                    selected = frameRate == RecordingFrameRate.Fps30,
+                    enabled = enabled,
+                    onClick = { onFrameRateSelect(RecordingFrameRate.Fps30) },
+                )
+                RecordingChoice(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.fps_60),
+                    selected = frameRate == RecordingFrameRate.Fps60,
+                    enabled = enabled,
+                    onClick = { onFrameRateSelect(RecordingFrameRate.Fps60) },
+                )
+            }
+
+            Text(
+                text = stringResource(R.string.video_bitrate),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                RecordingChoice(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.bitrate_efficient),
+                    selected = bitratePreset == VideoBitratePreset.Efficient,
+                    enabled = enabled,
+                    onClick = { onBitrateSelect(VideoBitratePreset.Efficient) },
+                )
+                RecordingChoice(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.bitrate_balanced),
+                    selected = bitratePreset == VideoBitratePreset.Balanced,
+                    enabled = enabled,
+                    onClick = { onBitrateSelect(VideoBitratePreset.Balanced) },
+                )
+                RecordingChoice(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.bitrate_high),
+                    selected = bitratePreset == VideoBitratePreset.High,
+                    enabled = enabled,
+                    onClick = { onBitrateSelect(VideoBitratePreset.High) },
+                )
+            }
+
+            Text(
+                text = stringResource(R.string.profile_compatibility_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecordingChoice(
+    modifier: Modifier,
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = label,
+        modifier = modifier
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
+                },
+                RoundedCornerShape(14.dp),
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 11.dp),
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = if (selected) FontWeight.Black else FontWeight.SemiBold,
+        color = if (enabled) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        },
+    )
+}
+
+@Composable
+private fun qualityShortLabel(quality: RecordingQuality): String =
+    when (quality) {
+        RecordingQuality.Auto -> stringResource(R.string.quality_auto)
+        RecordingQuality.P720 -> stringResource(R.string.quality_720p)
+        RecordingQuality.P1080 -> stringResource(R.string.quality_1080p)
+        RecordingQuality.P1440 -> stringResource(R.string.quality_1440p)
+    }
+
+@Composable
+private fun frameRateShortLabel(frameRate: RecordingFrameRate): String =
+    when (frameRate) {
+        RecordingFrameRate.Fps30 -> stringResource(R.string.fps_30)
+        RecordingFrameRate.Fps60 -> stringResource(R.string.fps_60)
+    }
 
 @Composable
 private fun AudioStudioCard(
