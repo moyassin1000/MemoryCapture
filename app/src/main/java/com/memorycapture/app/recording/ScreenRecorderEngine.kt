@@ -2,6 +2,8 @@ package com.memorycapture.app.recording
 
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.MediaCodec
@@ -9,10 +11,13 @@ import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.media.MediaScannerConnection
+import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.os.HandlerThread
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.view.Surface
@@ -26,9 +31,17 @@ import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 data class SavedRecording(
+    val displayName: String,
+    val uri: Uri?,
+    val locationLabel: String,
+)
+
+data class SavedScreenshot(
     val displayName: String,
     val uri: Uri?,
     val locationLabel: String,
@@ -67,6 +80,8 @@ class ScreenRecorderEngine(
     private var pauseStartedNs = 0L
     private var started = false
     private var paused = false
+    private var activeCaptureWidth = 0
+    private var activeCaptureHeight = 0
 
     fun start(
         projection: MediaProjection,
@@ -199,6 +214,8 @@ class ScreenRecorderEngine(
             )
 
             virtualDisplay = localDisplay
+            activeCaptureWidth = activeProfile.width
+            activeCaptureHeight = activeProfile.height
         } catch (error: Throwable) {
             started = false
             abortDrain = true
@@ -244,6 +261,78 @@ class ScreenRecorderEngine(
         totalVideoPausedUs += pausedUs
         pauseStartedNs = 0L
         paused = false
+    }
+
+    @Synchronized
+    fun captureScreenshot(): SavedScreenshot? {
+        if (!started || paused) return null
+
+        val display = virtualDisplay ?: return null
+        val encoderSurface = inputSurface ?: return null
+        val width = activeCaptureWidth
+        val height = activeCaptureHeight
+        if (width <= 0 || height <= 0) return null
+
+        val imageReader = ImageReader.newInstance(
+            width,
+            height,
+            PixelFormat.RGBA_8888,
+            2,
+        )
+        val handlerThread = HandlerThread("MemoryCapture-Screenshot").apply { start() }
+        val handler = Handler(handlerThread.looper)
+        val latch = CountDownLatch(1)
+        var bitmap: Bitmap? = null
+
+        imageReader.setOnImageAvailableListener({ reader ->
+            val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
+            try {
+                val plane = image.planes.firstOrNull() ?: return@setOnImageAvailableListener
+                val buffer = plane.buffer
+                val pixelStride = plane.pixelStride
+                val rowStride = plane.rowStride
+                val rowPadding = rowStride - pixelStride * width
+                val paddedWidth = width + rowPadding / pixelStride
+
+                val padded = Bitmap.createBitmap(
+                    paddedWidth,
+                    height,
+                    Bitmap.Config.ARGB_8888,
+                )
+                padded.copyPixelsFromBuffer(buffer)
+                bitmap = if (paddedWidth == width) {
+                    padded
+                } else {
+                    Bitmap.createBitmap(padded, 0, 0, width, height).also {
+                        padded.recycle()
+                    }
+                }
+            } finally {
+                image.close()
+                latch.countDown()
+            }
+        }, handler)
+
+        return try {
+            display.surface = imageReader.surface
+            val captured = latch.await(SCREENSHOT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            display.surface = encoderSurface
+
+            if (!captured) return null
+            val imageBitmap = bitmap ?: return null
+            try {
+                saveScreenshotBitmap(imageBitmap)
+            } finally {
+                imageBitmap.recycle()
+            }
+        } catch (_: Throwable) {
+            runCatching { display.surface = encoderSurface }
+            null
+        } finally {
+            imageReader.setOnImageAvailableListener(null, null)
+            imageReader.close()
+            handlerThread.quitSafely()
+        }
     }
 
     fun stopAndSave(): SavedRecording? {
@@ -690,6 +779,84 @@ class ScreenRecorderEngine(
         )
     }
 
+    private fun saveScreenshotBitmap(bitmap: Bitmap): SavedScreenshot? {
+        val displayName =
+            "MemoryCapture_" +
+                SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date()) +
+                ".png"
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                put(
+                    MediaStore.Images.Media.RELATIVE_PATH,
+                    Environment.DIRECTORY_PICTURES + "/MemoryCapture",
+                )
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val uri = context.contentResolver.insert(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                values,
+            ) ?: return null
+
+            val written = runCatching {
+                context.contentResolver.openOutputStream(uri, "w")?.use { stream ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                } == true
+            }.getOrDefault(false)
+
+            if (!written) {
+                runCatching { context.contentResolver.delete(uri, null, null) }
+                return null
+            }
+
+            context.contentResolver.update(
+                uri,
+                ContentValues().apply {
+                    put(MediaStore.Images.Media.IS_PENDING, 0)
+                },
+                null,
+                null,
+            )
+
+            return SavedScreenshot(
+                displayName = displayName,
+                uri = uri,
+                locationLabel = Environment.DIRECTORY_PICTURES + "/MemoryCapture",
+            )
+        }
+
+        val root = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+            ?: context.filesDir
+        val directory = File(root, "MemoryCapture").apply { mkdirs() }
+        val file = File(directory, displayName)
+
+        val written = runCatching {
+            file.outputStream().use { stream ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            }
+        }.getOrDefault(false)
+
+        if (!written) {
+            runCatching { file.delete() }
+            return null
+        }
+
+        MediaScannerConnection.scanFile(
+            context,
+            arrayOf(file.absolutePath),
+            arrayOf("image/png"),
+            null,
+        )
+
+        return SavedScreenshot(
+            displayName = displayName,
+            uri = null,
+            locationLabel = file.parentFile?.absolutePath ?: file.absolutePath,
+        )
+    }
+
     private fun finalizeOutput(output: OutputHandle) {
         if (output.pendingMediaStoreItem && output.uri != null) {
             val values = ContentValues().apply {
@@ -823,6 +990,8 @@ class ScreenRecorderEngine(
         outputHandle = null
         drainThread = null
         audioCaptureEngine = null
+        activeCaptureWidth = 0
+        activeCaptureHeight = 0
         drainFailure = null
         abortDrain = false
         paused = false
@@ -870,6 +1039,7 @@ class ScreenRecorderEngine(
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 8_000L
         private const val DRAIN_ABORT_JOIN_TIMEOUT_MS = 1_500L
+        private const val SCREENSHOT_TIMEOUT_MS = 1_500L
         private const val MAX_PENDING_BYTES = 16 * 1024 * 1024
     }
 }
