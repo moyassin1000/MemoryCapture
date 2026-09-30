@@ -362,8 +362,16 @@ class RecordingService : Service() {
     override fun onDestroy() {
         floatingControls?.hide()
         if (recorderEngine.isActive()) {
+            val highlights = RecordingSessionStore.snapshotHighlights()
             val saved = recorderEngine.stopAndSave()
-            if (saved != null) publishSavedRecording(saved)
+            if (saved != null) {
+                publishSavedRecording(saved)
+                highlightRepository.save(
+                    recordingUri = saved.uri?.toString(),
+                    displayName = saved.displayName,
+                    highlightsMillis = highlights,
+                )
+            }
         }
         RecordingSessionStore.clear()
         intentionalStop = true
