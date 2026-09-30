@@ -15,6 +15,7 @@ import com.memorycapture.app.data.preferences.AudioMode
 import com.memorycapture.app.data.preferences.RecordingFrameRate
 import com.memorycapture.app.data.preferences.RecordingQuality
 import com.memorycapture.app.data.preferences.VideoBitratePreset
+import com.memorycapture.app.data.recordings.RecordingHighlightRepository
 import com.memorycapture.app.R
 import com.memorycapture.app.projection.MediaProjectionController
 import com.memorycapture.app.recording.RecordingError
@@ -24,10 +25,12 @@ import com.memorycapture.app.recording.RecordingStateStore
 import com.memorycapture.app.recording.SavedRecording
 import com.memorycapture.app.recording.SavedRecordingStore
 import com.memorycapture.app.recording.ScreenRecorderEngine
+import kotlin.concurrent.thread
 
 class RecordingService : Service() {
     private lateinit var projectionController: MediaProjectionController
     private lateinit var recorderEngine: ScreenRecorderEngine
+    private lateinit var highlightRepository: RecordingHighlightRepository
     private var floatingControls: FloatingRecordingControls? = null
     private var intentionalStop = false
 
@@ -35,6 +38,7 @@ class RecordingService : Service() {
         super.onCreate()
         projectionController = MediaProjectionController(this)
         recorderEngine = ScreenRecorderEngine(this)
+        highlightRepository = RecordingHighlightRepository(applicationContext)
         floatingControls = FloatingRecordingControls(
             context = this,
             onPauseResume = {
@@ -42,6 +46,21 @@ class RecordingService : Service() {
                     is RecordingState.Paused -> resumeProjectionSession()
                     is RecordingState.Recording -> pauseProjectionSession()
                     else -> Unit
+                }
+            },
+            onScreenshot = {
+                if (RecordingStateStore.state.value is RecordingState.Recording) {
+                    thread(
+                        start = true,
+                        name = "MemoryCapture-ScreenshotAction",
+                    ) {
+                        recorderEngine.captureScreenshot()
+                    }
+                }
+            },
+            onHighlight = {
+                if (RecordingStateStore.state.value is RecordingState.Recording) {
+                    RecordingSessionStore.markHighlight()
                 }
             },
             onStop = ::stopProjectionSession,
@@ -183,18 +202,24 @@ class RecordingService : Service() {
         RecordingStateStore.transition(RecordingState.Stopping)
         RecordingStateStore.transition(RecordingState.Processing)
 
+        val highlights = RecordingSessionStore.snapshotHighlights()
         val saved = recorderEngine.stopAndSave()
-        RecordingSessionStore.clear()
         intentionalStop = true
         projectionController.stop()
 
         if (saved != null) {
             publishSavedRecording(saved)
+            highlightRepository.save(
+                recordingUri = saved.uri?.toString(),
+                displayName = saved.displayName,
+                highlightsMillis = highlights,
+            )
             RecordingStateStore.transition(RecordingState.Completed)
         } else {
             RecordingStateStore.forceError(RecordingError.MuxerFailure)
         }
 
+        RecordingSessionStore.clear()
         floatingControls?.hide()
         stopForegroundAndSelf()
     }
@@ -207,16 +232,22 @@ class RecordingService : Service() {
             RecordingStateStore.transition(RecordingState.Stopping)
             RecordingStateStore.transition(RecordingState.Processing)
 
+            val highlights = RecordingSessionStore.snapshotHighlights()
             val saved = recorderEngine.stopAndSave()
-            RecordingSessionStore.clear()
             if (saved != null) {
                 publishSavedRecording(saved)
+                highlightRepository.save(
+                    recordingUri = saved.uri?.toString(),
+                    displayName = saved.displayName,
+                    highlightsMillis = highlights,
+                )
                 RecordingStateStore.transition(RecordingState.Completed)
             } else {
                 RecordingStateStore.forceError(RecordingError.RecordingInterrupted)
             }
         }
 
+        RecordingSessionStore.clear()
         intentionalStop = true
         floatingControls?.hide()
         stopForegroundAndSelf()
@@ -342,8 +373,16 @@ class RecordingService : Service() {
     override fun onDestroy() {
         floatingControls?.hide()
         if (recorderEngine.isActive()) {
+            val highlights = RecordingSessionStore.snapshotHighlights()
             val saved = recorderEngine.stopAndSave()
-            if (saved != null) publishSavedRecording(saved)
+            if (saved != null) {
+                publishSavedRecording(saved)
+                highlightRepository.save(
+                    recordingUri = saved.uri?.toString(),
+                    displayName = saved.displayName,
+                    highlightsMillis = highlights,
+                )
+            }
         }
         RecordingSessionStore.clear()
         intentionalStop = true

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +53,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.memorycapture.app.R
+import com.memorycapture.app.data.recordings.RecordingHighlightRepository
 import com.memorycapture.app.ui.components.PremiumBackground
 import com.memorycapture.app.ui.recordings.shareVideo
 import kotlinx.coroutines.delay
@@ -63,6 +66,12 @@ fun VideoPlayerScreen(
 ) {
     val context = LocalContext.current
     val uri = remember(uriString) { Uri.parse(uriString) }
+    val highlightRepository = remember {
+        RecordingHighlightRepository(context.applicationContext)
+    }
+    val highlights = remember(uriString) {
+        highlightRepository.loadByUri(uriString)
+    }
     val player = remember(uriString) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(uri))
@@ -168,6 +177,35 @@ fun VideoPlayerScreen(
                         .padding(horizontal = 20.dp, vertical = 18.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    if (highlights.isNotEmpty()) {
+                        Text(
+                            text = stringResource(R.string.highlights),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(highlights.size) { index ->
+                                val timestamp = highlights[index]
+                                AssistChip(
+                                    onClick = {
+                                        player.seekTo(timestamp)
+                                        player.play()
+                                    },
+                                    label = {
+                                        Text(
+                                            stringResource(
+                                                R.string.highlight_number_time,
+                                                index + 1,
+                                                formatPlayerTime(timestamp),
+                                            ),
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                    }
+
                     Slider(
                         value = sliderPosition,
                         onValueChange = {

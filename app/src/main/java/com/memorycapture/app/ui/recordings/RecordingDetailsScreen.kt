@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -61,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.memorycapture.app.R
 import com.memorycapture.app.data.preferences.AppPreferences
+import com.memorycapture.app.data.recordings.RecordingHighlightRepository
 import com.memorycapture.app.data.recordings.RecordingItem
 import com.memorycapture.app.data.recordings.RecordingRepository
 import com.memorycapture.app.ui.components.PremiumBackground
@@ -79,6 +82,9 @@ fun RecordingDetailsScreen(
 ) {
     val context = LocalContext.current
     val repository = remember { RecordingRepository(context.applicationContext) }
+    val highlightRepository = remember {
+        RecordingHighlightRepository(context.applicationContext)
+    }
     val preferences = remember { AppPreferences(context.applicationContext) }
     val customTreeUri by preferences.storageTreeUri.collectAsStateWithLifecycle(initialValue = null)
     val scope = rememberCoroutineScope()
@@ -321,6 +327,50 @@ fun RecordingDetailsScreen(
                             value = DateFormat.getDateInstance(DateFormat.MEDIUM)
                                 .format(Date(recording.dateAddedMillis)),
                         )
+                    }
+
+                    val highlights = remember(recording.uri, recording.displayName) {
+                        highlightRepository.load(
+                            recordingUri = recording.uri,
+                            displayName = recording.displayName,
+                        )
+                    }
+
+                    if (highlights.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                            ),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    text = stringResource(
+                                        R.string.highlights_count,
+                                        highlights.size,
+                                    ),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Black,
+                                )
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    items(highlights.size) { index ->
+                                        AssistChip(
+                                            onClick = { onPlay(recording.uri) },
+                                            label = {
+                                                Text(
+                                                    formatDuration(highlights[index]),
+                                                )
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     Button(

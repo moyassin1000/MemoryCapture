@@ -17,6 +17,8 @@ import kotlin.math.abs
 class FloatingRecordingControls(
     private val context: Context,
     private val onPauseResume: () -> Unit,
+    private val onScreenshot: () -> Unit,
+    private val onHighlight: () -> Unit,
     private val onStop: () -> Unit,
 ) {
     private val windowManager =
@@ -48,6 +50,20 @@ class FloatingRecordingControls(
             onPauseResume()
         }
 
+        val screenshotButton = actionButton(
+            text = context.getString(R.string.floating_screenshot),
+            backgroundColor = Color.rgb(55, 105, 175),
+        ) {
+            onScreenshot()
+        }
+
+        val highlightButton = actionButton(
+            text = context.getString(R.string.floating_highlight),
+            backgroundColor = Color.rgb(126, 90, 190),
+        ) {
+            onHighlight()
+        }
+
         val stopButton = actionButton(
             text = context.getString(R.string.notification_stop),
             backgroundColor = Color.rgb(190, 42, 55),
@@ -56,6 +72,8 @@ class FloatingRecordingControls(
         }
 
         panel.addView(pauseButton)
+        panel.addView(screenshotButton)
+        panel.addView(highlightButton)
         panel.addView(stopButton)
 
         val bubble = TextView(context).apply {

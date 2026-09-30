@@ -46,10 +46,14 @@ object RecordingSessionStore {
     private val mutableAccumulatedPausedMs = MutableStateFlow(0L)
     val accumulatedPausedMs: StateFlow<Long> = mutableAccumulatedPausedMs.asStateFlow()
 
+    private val mutableHighlights = MutableStateFlow<List<Long>>(emptyList())
+    val highlightsMillis: StateFlow<List<Long>> = mutableHighlights.asStateFlow()
+
     fun markStarted() {
         mutableStartedAt.value = SystemClock.elapsedRealtime()
         mutablePausedAt.value = null
         mutableAccumulatedPausedMs.value = 0L
+        mutableHighlights.value = emptyList()
     }
 
     fun markPaused() {
@@ -64,9 +68,32 @@ object RecordingSessionStore {
         mutablePausedAt.value = null
     }
 
+    fun markHighlight(): Long? {
+        val startedAt = mutableStartedAt.value ?: return null
+        val now = SystemClock.elapsedRealtime()
+        val pausedAt = mutablePausedAt.value
+        val currentPauseMs = pausedAt?.let { (now - it).coerceAtLeast(0L) } ?: 0L
+        val activeMs =
+            (now - startedAt - mutableAccumulatedPausedMs.value - currentPauseMs)
+                .coerceAtLeast(0L)
+
+        val existing = mutableHighlights.value
+        if (existing.lastOrNull()?.let { activeMs - it < MIN_HIGHLIGHT_GAP_MS } == true) {
+            return existing.last()
+        }
+
+        mutableHighlights.value = existing + activeMs
+        return activeMs
+    }
+
+    fun snapshotHighlights(): List<Long> = mutableHighlights.value
+
     fun clear() {
         mutableStartedAt.value = null
         mutablePausedAt.value = null
         mutableAccumulatedPausedMs.value = 0L
+        mutableHighlights.value = emptyList()
     }
+
+    private const val MIN_HIGHLIGHT_GAP_MS = 750L
 }
