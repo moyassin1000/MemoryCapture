@@ -18,6 +18,7 @@ import com.memorycapture.app.billing.ProBillingManager
 import com.memorycapture.app.data.preferences.AppPreferences
 import com.memorycapture.app.data.preferences.AudioMode
 import com.memorycapture.app.data.preferences.ProAccent
+import com.memorycapture.app.data.preferences.InstantReplayDuration
 import com.memorycapture.app.data.preferences.RecordingFrameRate
 import com.memorycapture.app.data.preferences.RecordingQuality
 import com.memorycapture.app.data.preferences.ThemeMode
@@ -161,6 +162,7 @@ class MainActivity : AppCompatActivity() {
         val recordingQuality = preferences.recordingQuality.first()
         val recordingFrameRate = preferences.recordingFrameRate.first()
         val videoBitratePreset = preferences.videoBitratePreset.first()
+        val instantReplayDuration = preferences.instantReplayDuration.first()
 
         val intent = Intent(this, RecordingService::class.java)
             .setAction(RecordingService.ACTION_START)
@@ -173,6 +175,10 @@ class MainActivity : AppCompatActivity() {
             .putExtra(RecordingService.EXTRA_RECORDING_QUALITY, recordingQuality.name)
             .putExtra(RecordingService.EXTRA_RECORDING_FRAME_RATE, recordingFrameRate.name)
             .putExtra(RecordingService.EXTRA_VIDEO_BITRATE_PRESET, videoBitratePreset.name)
+            .putExtra(
+                RecordingService.EXTRA_INSTANT_REPLAY_DURATION,
+                instantReplayDuration.name,
+            )
 
         ContextCompat.startForegroundService(this, intent)
     }

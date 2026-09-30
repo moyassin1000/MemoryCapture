@@ -57,6 +57,7 @@ class ScreenRecorderEngine(
     private var outputHandle: OutputHandle? = null
     private var drainThread: Thread? = null
     private var audioCaptureEngine: AudioCaptureEngine? = null
+    private var replayBuffer: InstantReplayBuffer? = null
 
     private val muxerLock = Any()
     private val pendingSamples = ArrayDeque<PendingSample>()
@@ -114,6 +115,10 @@ class ScreenRecorderEngine(
         try {
             resetMuxerState(
                 trackCount = if (audioMode == AudioMode.None) 1 else 2,
+            )
+            replayBuffer = InstantReplayBuffer(
+                cacheDirectory = context.cacheDir,
+                maxDurationUs = MAX_REPLAY_DURATION_US,
             )
 
             val preferredProfile = EncoderProfile(
@@ -335,6 +340,30 @@ class ScreenRecorderEngine(
         }
     }
 
+    @Synchronized
+    fun saveInstantReplay(durationSeconds: Int): SavedRecording? {
+        if (!started) return null
+        val tempDir = File(context.cacheDir, "instant_replay_exports").apply { mkdirs() }
+        val tempFile = File(
+            tempDir,
+            "Replay_" +
+                SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) +
+                ".mp4",
+        )
+
+        val exported = replayBuffer?.export(
+            outputPath = tempFile.absolutePath,
+            durationUs = durationSeconds.coerceIn(5, 180) * 1_000_000L,
+        ) == true
+
+        if (!exported || !tempFile.exists() || tempFile.length() <= 0L) {
+            runCatching { tempFile.delete() }
+            return null
+        }
+
+        return importReplayFile(tempFile)
+    }
+
     fun stopAndSave(): SavedRecording? {
         if (!started) return null
 
@@ -545,11 +574,13 @@ class ScreenRecorderEngine(
                 TrackKind.Video -> {
                     if (videoTrackIndex >= 0) return
                     videoTrackIndex = activeMuxer.addTrack(format)
+                    replayBuffer?.registerFormat(ReplayTrackKind.Video, format)
                 }
 
                 TrackKind.Audio -> {
                     if (audioTrackIndex >= 0) return
                     audioTrackIndex = activeMuxer.addTrack(format)
+                    replayBuffer?.registerFormat(ReplayTrackKind.Audio, format)
                 }
             }
 
@@ -575,6 +606,16 @@ class ScreenRecorderEngine(
 
         synchronized(muxerLock) {
             val normalizedPts = normalizedPresentationTime(kind, info.presentationTimeUs)
+
+            replayBuffer?.append(
+                kind = when (kind) {
+                    TrackKind.Video -> ReplayTrackKind.Video
+                    TrackKind.Audio -> ReplayTrackKind.Audio
+                },
+                buffer = buffer,
+                info = info,
+                normalizedPtsUs = normalizedPts,
+            )
 
             if (muxerStarted) {
                 val trackIndex = trackIndex(kind)
@@ -857,6 +898,72 @@ class ScreenRecorderEngine(
         )
     }
 
+    private fun importReplayFile(file: File): SavedRecording? {
+        val displayName = file.name
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Video.Media.DISPLAY_NAME, displayName)
+                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                put(
+                    MediaStore.Video.Media.RELATIVE_PATH,
+                    Environment.DIRECTORY_MOVIES + "/MemoryCapture/Replays",
+                )
+                put(MediaStore.Video.Media.IS_PENDING, 1)
+            }
+            val uri = context.contentResolver.insert(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                values,
+            ) ?: return null
+
+            val copied = runCatching {
+                context.contentResolver.openOutputStream(uri, "w")?.use { output ->
+                    file.inputStream().use { input -> input.copyTo(output) }
+                }
+                true
+            }.getOrDefault(false)
+
+            if (!copied) {
+                runCatching { context.contentResolver.delete(uri, null, null) }
+                return null
+            }
+
+            context.contentResolver.update(
+                uri,
+                ContentValues().apply {
+                    put(MediaStore.Video.Media.IS_PENDING, 0)
+                },
+                null,
+                null,
+            )
+            runCatching { file.delete() }
+
+            return SavedRecording(
+                displayName = displayName,
+                uri = uri,
+                locationLabel = Environment.DIRECTORY_MOVIES + "/MemoryCapture/Replays",
+            )
+        }
+
+        val root = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
+            ?: context.filesDir
+        val directory = File(root, "MemoryCapture/Replays").apply { mkdirs() }
+        val target = File(directory, displayName)
+        file.copyTo(target, overwrite = true)
+        runCatching { file.delete() }
+        MediaScannerConnection.scanFile(
+            context,
+            arrayOf(target.absolutePath),
+            arrayOf("video/mp4"),
+            null,
+        )
+        return SavedRecording(
+            displayName = target.name,
+            uri = null,
+            locationLabel = target.parentFile?.absolutePath ?: target.absolutePath,
+        )
+    }
+
     private fun finalizeOutput(output: OutputHandle) {
         if (output.pendingMediaStoreItem && output.uri != null) {
             val values = ContentValues().apply {
@@ -990,6 +1097,8 @@ class ScreenRecorderEngine(
         outputHandle = null
         drainThread = null
         audioCaptureEngine = null
+        replayBuffer?.clear()
+        replayBuffer = null
         activeCaptureWidth = 0
         activeCaptureHeight = 0
         drainFailure = null
@@ -1036,6 +1145,7 @@ class ScreenRecorderEngine(
         private const val I_FRAME_INTERVAL_SECONDS = 1
         private const val MIN_VIDEO_BIT_RATE = 2_500_000
         private const val MAX_VIDEO_BIT_RATE = 28_000_000
+        private const val MAX_REPLAY_DURATION_US = 180_000_000L
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 8_000L
         private const val DRAIN_ABORT_JOIN_TIMEOUT_MS = 1_500L

@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.memorycapture.app.MainActivity
 import com.memorycapture.app.data.preferences.AudioMode
+import com.memorycapture.app.data.preferences.InstantReplayDuration
 import com.memorycapture.app.data.preferences.RecordingFrameRate
 import com.memorycapture.app.data.preferences.RecordingQuality
 import com.memorycapture.app.data.preferences.VideoBitratePreset
@@ -32,6 +33,7 @@ class RecordingService : Service() {
     private lateinit var recorderEngine: ScreenRecorderEngine
     private lateinit var highlightRepository: RecordingHighlightRepository
     private var floatingControls: FloatingRecordingControls? = null
+    private var replayDurationSeconds = InstantReplayDuration.Seconds60.seconds
     private var intentionalStop = false
 
     override fun onCreate() {
@@ -61,6 +63,16 @@ class RecordingService : Service() {
             onHighlight = {
                 if (RecordingStateStore.state.value is RecordingState.Recording) {
                     RecordingSessionStore.markHighlight()
+                }
+            },
+            onSaveReplay = {
+                if (RecordingStateStore.state.value is RecordingState.Recording) {
+                    thread(
+                        start = true,
+                        name = "MemoryCapture-InstantReplay",
+                    ) {
+                        recorderEngine.saveInstantReplay(replayDurationSeconds)
+                    }
                 }
             },
             onStop = ::stopProjectionSession,
@@ -119,6 +131,13 @@ class RecordingService : Service() {
                     ?: VideoBitratePreset.Balanced.name,
             )
         }.getOrDefault(VideoBitratePreset.Balanced)
+
+        replayDurationSeconds = runCatching {
+            InstantReplayDuration.valueOf(
+                intent.getStringExtra(EXTRA_INSTANT_REPLAY_DURATION)
+                    ?: InstantReplayDuration.Seconds60.name,
+            ).seconds
+        }.getOrDefault(InstantReplayDuration.Seconds60.seconds)
 
         startAsForeground(audioMode)
         intentionalStop = false
@@ -406,6 +425,7 @@ class RecordingService : Service() {
         const val EXTRA_RECORDING_QUALITY = "recording_quality"
         const val EXTRA_RECORDING_FRAME_RATE = "recording_frame_rate"
         const val EXTRA_VIDEO_BITRATE_PRESET = "video_bitrate_preset"
+        const val EXTRA_INSTANT_REPLAY_DURATION = "instant_replay_duration"
         private const val CHANNEL_ID = "recording"
         private const val NOTIFICATION_ID = 1001
     }

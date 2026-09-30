@@ -19,6 +19,7 @@ class FloatingRecordingControls(
     private val onPauseResume: () -> Unit,
     private val onScreenshot: () -> Unit,
     private val onHighlight: () -> Unit,
+    private val onSaveReplay: () -> Unit,
     private val onStop: () -> Unit,
 ) {
     private val windowManager =
@@ -64,6 +65,13 @@ class FloatingRecordingControls(
             onHighlight()
         }
 
+        val replayButton = actionButton(
+            text = context.getString(R.string.floating_save_replay),
+            backgroundColor = Color.rgb(34, 135, 110),
+        ) {
+            onSaveReplay()
+        }
+
         val stopButton = actionButton(
             text = context.getString(R.string.notification_stop),
             backgroundColor = Color.rgb(190, 42, 55),
@@ -74,6 +82,7 @@ class FloatingRecordingControls(
         panel.addView(pauseButton)
         panel.addView(screenshotButton)
         panel.addView(highlightButton)
+        panel.addView(replayButton)
         panel.addView(stopButton)
 
         val bubble = TextView(context).apply {

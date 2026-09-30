@@ -251,6 +251,12 @@
     <string name="bitrate_high">عالي</string>
     <string name="profile_compatibility_note">سيحاول MemoryCapture استخدام الإعدادات المختارة، وإذا رفض الجهاز 1440p أو 60 إطار/ث فسيعود تلقائيًا إلى إعداد متوافق وآمن.</string>
     <string name="floating_screenshot">📸 لقطة</string>
+    <string name="floating_save_replay">⏪ حفظ الإعادة</string>
+    <string name="instant_replay">الإعادة الفورية</string>
+    <string name="instant_replay_body">يحتفظ MemoryCapture بآخر جزء من التسجيل مؤقتًا ويمكنك حفظه أثناء استمرار التسجيل.</string>
+    <string name="replay_30_seconds">30 ثانية</string>
+    <string name="replay_60_seconds">دقيقة</string>
+    <string name="replay_180_seconds">3 دقائق</string>
     <string name="floating_highlight">⭐ علامة</string>
     <string name="highlights">اللحظات المهمة</string>
     <string name="highlights_count">%1$d علامة محفوظة</string>

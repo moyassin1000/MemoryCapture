@@ -51,6 +51,12 @@ enum class VideoBitratePreset {
     High,
 }
 
+enum class InstantReplayDuration(val seconds: Int) {
+    Seconds30(30),
+    Seconds60(60),
+    Seconds180(180),
+}
+
 class AppPreferences(
     private val context: Context,
 ) {
@@ -131,6 +137,16 @@ class AppPreferences(
             }.getOrDefault(VideoBitratePreset.Balanced)
         }
 
+    val instantReplayDuration: Flow<InstantReplayDuration> =
+        context.memoryCaptureDataStore.data.map { preferences ->
+            runCatching {
+                InstantReplayDuration.valueOf(
+                    preferences[KEY_INSTANT_REPLAY_DURATION]
+                        ?: InstantReplayDuration.Seconds60.name,
+                )
+            }.getOrDefault(InstantReplayDuration.Seconds60)
+        }
+
     suspend fun setThemeMode(mode: ThemeMode) {
         context.memoryCaptureDataStore.edit { it[KEY_THEME] = mode.name }
     }
@@ -191,6 +207,12 @@ class AppPreferences(
         context.memoryCaptureDataStore.edit { it[KEY_VIDEO_BITRATE_PRESET] = preset.name }
     }
 
+    suspend fun setInstantReplayDuration(duration: InstantReplayDuration) {
+        context.memoryCaptureDataStore.edit {
+            it[KEY_INSTANT_REPLAY_DURATION] = duration.name
+        }
+    }
+
     suspend fun toggleFavoriteRecording(uri: String) {
         context.memoryCaptureDataStore.edit { preferences ->
             val current = preferences[KEY_FAVORITE_RECORDINGS] ?: emptySet()
@@ -223,5 +245,6 @@ class AppPreferences(
         private val KEY_RECORDING_QUALITY = stringPreferencesKey("recording_quality")
         private val KEY_RECORDING_FRAME_RATE = stringPreferencesKey("recording_frame_rate")
         private val KEY_VIDEO_BITRATE_PRESET = stringPreferencesKey("video_bitrate_preset")
+        private val KEY_INSTANT_REPLAY_DURATION = stringPreferencesKey("instant_replay_duration")
     }
 }
