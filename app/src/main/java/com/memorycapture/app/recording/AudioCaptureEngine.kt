@@ -15,6 +15,7 @@ import android.media.MediaFormat
 import android.media.MediaRecorder
 import android.media.projection.MediaProjection
 import android.os.Build
+import android.os.SystemClock
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.memorycapture.app.data.preferences.AudioMode
@@ -56,6 +57,9 @@ class AudioCaptureEngine(
 
     @Volatile
     private var runtimeHealth = AudioCaptureHealth.NotRequested
+
+    @Volatile
+    private var lastWorkerHeartbeatElapsedMs = 0L
 
     private var submittedFrames = 0L
 
@@ -163,6 +167,7 @@ class AudioCaptureEngine(
         submittedFrames = 0L
         failure = null
         runtimeHealth = AudioCaptureHealth.Healthy
+        lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
         paused = false
         running = true
 
@@ -257,6 +262,8 @@ class AudioCaptureEngine(
 
         try {
             while (running && !Thread.currentThread().isInterrupted) {
+                lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
+
                 if (paused) {
                     Thread.sleep(PAUSE_POLL_MS)
                     continue
@@ -295,6 +302,8 @@ class AudioCaptureEngine(
                 } else {
                     0
                 }
+
+                lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
 
                 val bytes = when (mode) {
                     AudioMode.None -> 0
@@ -515,6 +524,22 @@ class AudioCaptureEngine(
     fun health(): AudioCaptureHealth = runtimeHealth
 
     fun isRunning(): Boolean = running
+
+    fun isStalled(
+        nowElapsedMs: Long,
+        thresholdMs: Long,
+    ): Boolean =
+        running &&
+            !paused &&
+            lastWorkerHeartbeatElapsedMs > 0L &&
+            nowElapsedMs - lastWorkerHeartbeatElapsedMs >= thresholdMs
+
+    fun stopAfterStall() {
+        if (!running) return
+        runtimeHealth = AudioCaptureHealth.AllAudioLost
+        failure = failure ?: IllegalStateException("Audio capture stalled.")
+        abort()
+    }
 
     private fun mixPcm16(
         micBuffer: ByteArray,
