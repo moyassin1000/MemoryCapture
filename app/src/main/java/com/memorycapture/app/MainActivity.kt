@@ -98,8 +98,7 @@ class MainActivity : AppCompatActivity() {
             val shouldAttemptRecovery = when (RecordingStateStore.state.value) {
                 RecordingState.Idle,
                 RecordingState.Completed,
-                is RecordingState.Error,
-                -> true
+                is RecordingState.Error -> true
 
                 else -> false
             }
