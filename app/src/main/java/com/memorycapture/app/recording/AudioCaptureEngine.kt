@@ -224,6 +224,8 @@ class AudioCaptureEngine(
     fun pause() {
         if (!running || paused) return
         paused = true
+        restoreSpeakerAssist()
+        voipStatus = VoipCaptureStatus.Inactive
         runCatching { microphoneRecord?.stop() }
         runCatching { playbackRecord?.stop() }
     }
@@ -1034,6 +1036,8 @@ class AudioCaptureEngine(
         voipStatus = VoipCaptureStatus.Inactive
         callMicSilencedBySystem = false
         activeMicSource = MediaRecorder.AudioSource.MIC
+        accessibilityAssistEnabled = false
+        previousCommunicationDeviceId = null
         if (runtimeHealth == AudioCaptureHealth.Healthy && failure != null) {
             runtimeHealth = AudioCaptureHealth.AllAudioLost
         }
