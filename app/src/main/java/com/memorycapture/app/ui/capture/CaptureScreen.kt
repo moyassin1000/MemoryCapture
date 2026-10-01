@@ -58,6 +58,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.memorycapture.app.R
 import com.memorycapture.app.data.preferences.AppPreferences
@@ -67,6 +70,7 @@ import com.memorycapture.app.data.preferences.RecordingFrameRate
 import com.memorycapture.app.data.preferences.RecordingQuality
 import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.recording.AudioCaptureHealth
+import com.memorycapture.app.recording.CallCaptureCompatibility
 import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.GuardianThermalLevel
 import com.memorycapture.app.recording.RecordingGuardianStore
@@ -91,6 +95,12 @@ fun CaptureScreen(
     val context = LocalContext.current
     val preferences = remember { AppPreferences(context.applicationContext) }
     val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var enhancedCallCompatibilityEnabled by remember {
+        mutableStateOf(
+            CallCaptureCompatibility.isAccessibilityAssistEnabled(context),
+        )
+    }
     val storageLabel by preferences.storageLabel.collectAsStateWithLifecycle(initialValue = null)
     val audioMode by preferences.audioMode.collectAsStateWithLifecycle(
         initialValue = AudioMode.DeviceAndMic,
@@ -119,6 +129,19 @@ fun CaptureScreen(
         mutableStateOf(
             audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).toList(),
         )
+    }
+
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                enhancedCallCompatibilityEnabled =
+                    CallCaptureCompatibility.isAccessibilityAssistEnabled(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     DisposableEffect(audioManager) {
