@@ -26,6 +26,7 @@ import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.navigation.MemoryCaptureNavHost
 import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.RecordingError
+import com.memorycapture.app.recording.RecordingRecoveryManager
 import com.memorycapture.app.recording.RecordingState
 import com.memorycapture.app.recording.RecordingStateStore
 import com.memorycapture.app.recording.SavedRecordingStore
@@ -39,6 +40,7 @@ class MainActivity : AppCompatActivity() {
         getSystemService(MediaProjectionManager::class.java)
     }
     private val preferences by lazy { AppPreferences(applicationContext) }
+    private val recoveryManager by lazy { RecordingRecoveryManager(applicationContext) }
 
     private val projectionPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -87,6 +89,17 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         runCatching { ProBillingManager.initialize(applicationContext) }
+
+        lifecycleScope.launch {
+            val recovered = recoveryManager.recoverIfNeeded()
+            if (recovered != null) {
+                SavedRecordingStore.setSaved(
+                    displayName = recovered.displayName,
+                    location = recovered.locationLabel,
+                )
+                RecordingStateStore.transition(RecordingState.Completed)
+            }
+        }
 
         setContent {
             val themeMode = preferences.themeMode.collectAsStateWithLifecycle(
