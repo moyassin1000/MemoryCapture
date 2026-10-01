@@ -262,7 +262,9 @@
     <string name="highlights_count">%1$d saved highlights</string>
     <string name="highlight_number_time">Highlight %1$d • %2$s</string>
     <string name="recording_guardian">Recording Guardian</string>
-    <string name="guardian_storage_line">Storage: %1$s • Estimated remaining: %2$s</string>
+    <string name="guardian_storage_line">Recording destination: %1$s • Estimated remaining: %2$s</string>
+    <string name="guardian_workspace_line">Replay/Recovery workspace: %1$s</string>
+    <string name="guardian_destination_unknown_note">This custom storage provider does not expose reliable free-space information. MemoryCapture will still protect its internal Replay/Recovery workspace.</string>
     <string name="guardian_thermal_line">Thermal: %1$s</string>
     <string name="guardian_thermal_normal">Normal</string>
     <string name="guardian_thermal_warm">Warm</string>

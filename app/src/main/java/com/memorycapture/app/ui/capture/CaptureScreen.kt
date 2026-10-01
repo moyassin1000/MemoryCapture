@@ -291,10 +291,17 @@ fun CaptureScreen(
                 if (active) {
                     item {
                         RecordingGuardianCard(
-                            availableBytes = guardianStatus.availableBytes,
-                            remainingSeconds = guardianStatus.estimatedRemainingSeconds,
+                            destinationAvailableBytes =
+                                guardianStatus.destinationAvailableBytes,
+                            workingAvailableBytes =
+                                guardianStatus.workingAvailableBytes,
+                            remainingSeconds =
+                                guardianStatus.estimatedRemainingSeconds,
+                            destinationSpaceKnown =
+                                guardianStatus.destinationSpaceKnown,
                             thermalLevel = guardianStatus.thermalLevel,
                             warning = guardianStatus.storageWarning ||
+                                guardianStatus.workingStorageWarning ||
                                 guardianStatus.thermalWarning,
                         )
                     }
@@ -445,8 +452,10 @@ fun CaptureScreen(
 
 @Composable
 private fun RecordingGuardianCard(
-    availableBytes: Long,
+    destinationAvailableBytes: Long?,
+    workingAvailableBytes: Long?,
     remainingSeconds: Long?,
+    destinationSpaceKnown: Boolean,
     thermalLevel: GuardianThermalLevel,
     warning: Boolean,
 ) {
@@ -474,12 +483,28 @@ private fun RecordingGuardianCard(
             Text(
                 text = stringResource(
                     R.string.guardian_storage_line,
-                    formatGuardianStorage(availableBytes),
+                    formatGuardianStorage(destinationAvailableBytes),
                     remainingSeconds?.let(::formatGuardianRemaining)
                         ?: stringResource(R.string.guardian_unknown),
                 ),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            Text(
+                text = stringResource(
+                    R.string.guardian_workspace_line,
+                    formatGuardianStorage(workingAvailableBytes),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (!destinationSpaceKnown) {
+                Text(
+                    text = stringResource(
+                        R.string.guardian_destination_unknown_note,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
                 text = stringResource(
                     R.string.guardian_thermal_line,
@@ -508,8 +533,8 @@ private fun RecordingGuardianCard(
     }
 }
 
-private fun formatGuardianStorage(bytes: Long): String {
-    if (bytes <= 0L) return "—"
+private fun formatGuardianStorage(bytes: Long?): String {
+    if (bytes == null || bytes <= 0L) return "—"
     val gib = bytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
     return if (gib >= 1.0) {
         String.format(Locale.getDefault(), "%.1f GB", gib)
