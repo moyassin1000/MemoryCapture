@@ -292,6 +292,8 @@ class AudioCaptureEngine(
         var micSourceIndex = 0
         var lastMicProbeElapsedMs = 0L
         var lastMicRecoveryAttemptElapsedMs = 0L
+        var lastCommunicationActive = false
+        var lastSpeakerAssistAttemptElapsedMs = 0L
 
         try {
             while (running && !Thread.currentThread().isInterrupted) {
@@ -306,6 +308,21 @@ class AudioCaptureEngine(
                 val communicationActive = isCommunicationActive()
                 val microphoneRequested =
                     mode == AudioMode.Microphone || mode == AudioMode.DeviceAndMic
+
+                if (communicationActive) {
+                    if (
+                        voipAssistEnabled &&
+                        nowElapsedMs - lastSpeakerAssistAttemptElapsedMs >=
+                            SPEAKER_ASSIST_REASSERT_INTERVAL_MS
+                    ) {
+                        lastSpeakerAssistAttemptElapsedMs = nowElapsedMs
+                        applySpeakerAssist()
+                    }
+                } else if (lastCommunicationActive) {
+                    restoreSpeakerAssist()
+                    callMicSilencedBySystem = false
+                }
+                lastCommunicationActive = communicationActive
 
                 if (
                     microphoneRequested &&
@@ -1025,6 +1042,7 @@ class AudioCaptureEngine(
         private const val AUDIO_IDLE_BACKOFF_MS = 5L
         private const val CALL_MIC_PROBE_INTERVAL_MS = 1_000L
         private const val CALL_MIC_RECOVERY_INTERVAL_MS = 1_000L
+        private const val SPEAKER_ASSIST_REASSERT_INTERVAL_MS = 500L
         private const val AUDIO_FRAME_MS = 20L
         private const val SYNTHETIC_SILENCE_PACE_MS = AUDIO_FRAME_MS
         private const val SYNTHETIC_SILENCE_BYTES =
