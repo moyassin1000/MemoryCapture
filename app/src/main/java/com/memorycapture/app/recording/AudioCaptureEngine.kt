@@ -479,14 +479,6 @@ class AudioCaptureEngine(
                     } else {
                         read
                     }
-                } else if (
-                    microphoneRequested &&
-                    voipAssistEnabled
-                ) {
-                    val silenceBytes =
-                        minOf(SYNTHETIC_SILENCE_BYTES, micBuffer.size).and(-2)
-                    micBuffer.fill(0, 0, silenceBytes)
-                    silenceBytes
                 } else {
                     0
                 }
@@ -515,13 +507,15 @@ class AudioCaptureEngine(
 
                 lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
 
+                var syntheticMicFrame = false
                 val effectiveMicBytes =
                     if (
-                        communicationActive &&
                         microphoneRequested &&
                         voipAssistEnabled &&
-                        micBytes <= 0
+                        micBytes <= 0 &&
+                        (communicationActive || !micAvailable)
                     ) {
+                        syntheticMicFrame = true
                         val silenceBytes =
                             minOf(SYNTHETIC_SILENCE_BYTES, micBuffer.size).and(-2)
                         micBuffer.fill(0, 0, silenceBytes)
@@ -569,13 +563,7 @@ class AudioCaptureEngine(
                     waitForEos = false,
                 )
 
-                if (
-                    communicationActive &&
-                    microphoneRequested &&
-                    voipAssistEnabled &&
-                    micBytes <= 0 &&
-                    bytes > 0
-                ) {
+                if (syntheticMicFrame && bytes > 0) {
                     Thread.sleep(SYNTHETIC_SILENCE_PACE_MS)
                 } else if (bytes == 0 && (micAvailable || playbackAvailable)) {
                     Thread.sleep(AUDIO_IDLE_BACKOFF_MS)
@@ -954,6 +942,10 @@ class AudioCaptureEngine(
         preferredMicDeviceId: Int,
         audioSource: Int,
     ): AudioRecord? {
+        if (!running) return current
+
+        runCatching { current?.stop() }
+
         var candidate: AudioRecord? = null
         val replacement = runCatching {
             createMicrophoneRecord(
@@ -971,12 +963,18 @@ class AudioCaptureEngine(
             null
         }
 
-        if (replacement == null) {
+        if (replacement == null || !running) {
+            if (replacement != null) {
+                runCatching { replacement.stop() }
+                runCatching { replacement.release() }
+            }
+            if (running) {
+                runCatching { current?.startRecording() }
+            }
             microphoneRecord = current
             return current
         }
 
-        runCatching { current?.stop() }
         runCatching { current?.release() }
         microphoneRecord = replacement
         activeMicSource = audioSource
