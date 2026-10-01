@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioPlaybackCaptureConfiguration
@@ -36,10 +37,19 @@ enum class AudioCaptureHealth {
     AllAudioLost,
 }
 
+enum class VoipCaptureStatus {
+    Inactive,
+    CallDetected,
+    SpeakerAssistActive,
+    SilencedBySystem,
+    NoMicrophonePath,
+}
+
 @SuppressLint("MissingPermission")
 class AudioCaptureEngine(
     private val context: Context,
 ) {
+    private val audioManager = context.getSystemService(AudioManager::class.java)
     private var encoder: MediaCodec? = null
     private var microphoneRecord: AudioRecord? = null
     private var playbackRecord: AudioRecord? = null
@@ -59,6 +69,15 @@ class AudioCaptureEngine(
     private var runtimeHealth = AudioCaptureHealth.NotRequested
 
     @Volatile
+    private var voipStatus = VoipCaptureStatus.Inactive
+
+    @Volatile
+    private var voipAssistEnabled = false
+
+    private var speakerAssistApplied = false
+    private var legacySpeakerWasOn = false
+
+    @Volatile
     private var lastWorkerHeartbeatElapsedMs = 0L
 
     private var submittedFrames = 0L
@@ -67,6 +86,7 @@ class AudioCaptureEngine(
         projection: MediaProjection,
         mode: AudioMode,
         preferredMicDeviceId: Int = -1,
+        voipCaptureAssistEnabled: Boolean = false,
         sink: AudioMuxerSink,
     ) {
         if (mode == AudioMode.None) return
@@ -167,6 +187,8 @@ class AudioCaptureEngine(
         submittedFrames = 0L
         failure = null
         runtimeHealth = AudioCaptureHealth.Healthy
+        voipStatus = VoipCaptureStatus.Inactive
+        voipAssistEnabled = voipCaptureAssistEnabled
         lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
         paused = false
         running = true
@@ -523,6 +545,41 @@ class AudioCaptureEngine(
 
     fun health(): AudioCaptureHealth = runtimeHealth
 
+    fun refreshVoipCaptureStatus(): VoipCaptureStatus {
+        val communicationActive =
+            audioManager.mode == AudioManager.MODE_IN_COMMUNICATION ||
+                audioManager.mode == AudioManager.MODE_IN_CALL
+
+        if (!communicationActive) {
+            restoreSpeakerAssist()
+            voipStatus = VoipCaptureStatus.Inactive
+            return voipStatus
+        }
+
+        val mic = microphoneRecord
+        if (mic == null) {
+            restoreSpeakerAssist()
+            voipStatus = VoipCaptureStatus.NoMicrophonePath
+            return voipStatus
+        }
+
+        if (voipAssistEnabled) {
+            applySpeakerAssist()
+        } else {
+            restoreSpeakerAssist()
+        }
+
+        val silenced = isMicrophoneSilencedBySystem(mic)
+        voipStatus = when {
+            silenced -> VoipCaptureStatus.SilencedBySystem
+            speakerAssistApplied -> VoipCaptureStatus.SpeakerAssistActive
+            else -> VoipCaptureStatus.CallDetected
+        }
+        return voipStatus
+    }
+
+    fun voipCaptureStatus(): VoipCaptureStatus = voipStatus
+
     fun isRunning(): Boolean = running
 
     fun isStalled(
@@ -539,6 +596,58 @@ class AudioCaptureEngine(
         runtimeHealth = AudioCaptureHealth.AllAudioLost
         failure = failure ?: IllegalStateException("Audio capture stalled.")
         abort()
+    }
+
+    private fun isMicrophoneSilencedBySystem(record: AudioRecord): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+
+        return runCatching {
+            audioManager.activeRecordingConfigurations
+                .firstOrNull { configuration ->
+                    configuration.clientAudioSessionId == record.audioSessionId
+                }
+                ?.isClientSilenced == true
+        }.getOrDefault(false)
+    }
+
+    private fun applySpeakerAssist() {
+        if (speakerAssistApplied) return
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val speaker = audioManager.availableCommunicationDevices
+                .firstOrNull { device ->
+                    device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                }
+
+            if (speaker != null) {
+                speakerAssistApplied = runCatching {
+                    audioManager.setCommunicationDevice(speaker)
+                }.getOrDefault(false)
+            }
+            return
+        }
+
+        @Suppress("DEPRECATION")
+        runCatching {
+            legacySpeakerWasOn = audioManager.isSpeakerphoneOn
+            audioManager.isSpeakerphoneOn = true
+            speakerAssistApplied = true
+        }
+    }
+
+    private fun restoreSpeakerAssist() {
+        if (!speakerAssistApplied) return
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            runCatching { audioManager.clearCommunicationDevice() }
+        } else {
+            @Suppress("DEPRECATION")
+            runCatching {
+                audioManager.isSpeakerphoneOn = legacySpeakerWasOn
+            }
+        }
+
+        speakerAssistApplied = false
     }
 
     private fun mixPcm16(
@@ -633,11 +742,13 @@ class AudioCaptureEngine(
     }
 
     private fun clearReferences() {
+        restoreSpeakerAssist()
         encoder = null
         microphoneRecord = null
         playbackRecord = null
         worker = null
         paused = false
+        voipStatus = VoipCaptureStatus.Inactive
         if (runtimeHealth == AudioCaptureHealth.Healthy && failure != null) {
             runtimeHealth = AudioCaptureHealth.AllAudioLost
         }
