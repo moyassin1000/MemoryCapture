@@ -81,7 +81,10 @@ class ScreenRecorderEngine(
     private var firstAudioPtsUs = -1L
     private var totalVideoPausedUs = 0L
     private var pauseStartedNs = 0L
+    @Volatile
     private var started = false
+
+    @Volatile
     private var paused = false
     private var activeCaptureWidth = 0
     private var activeCaptureHeight = 0
