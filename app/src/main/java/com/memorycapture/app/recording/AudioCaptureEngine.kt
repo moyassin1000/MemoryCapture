@@ -396,7 +396,7 @@ class AudioCaptureEngine(
                             preferredMicDeviceId = preferredMicDeviceId,
                             audioSource = CALL_MIC_AUDIO_SOURCES[nextIndex],
                         )
-                        if (replacement != null) {
+                        if (replacement != null && replacement !== mic) {
                             mic = replacement
                             micAvailable = true
                             micSourceIndex = nextIndex
@@ -430,7 +430,7 @@ class AudioCaptureEngine(
                         preferredMicDeviceId = preferredMicDeviceId,
                         audioSource = CALL_MIC_AUDIO_SOURCES[targetIndex],
                     )
-                    if (replacement != null) {
+                    if (replacement != null && replacement !== mic) {
                         mic = replacement
                         micAvailable = true
                         micSourceIndex = targetIndex
@@ -454,7 +454,7 @@ class AudioCaptureEngine(
                         preferredMicDeviceId = preferredMicDeviceId,
                         audioSource = MediaRecorder.AudioSource.MIC,
                     )
-                    if (replacement != null) {
+                    if (replacement != null && replacement !== mic) {
                         mic = replacement
                         micAvailable = true
                         micSourceIndex = 0
@@ -985,7 +985,6 @@ class AudioCaptureEngine(
                 check(record.state == AudioRecord.STATE_INITIALIZED) {
                     "Unable to initialize microphone capture source: $audioSource"
                 }
-                activeMicSource = audioSource
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     applyPreferredMicrophoneDevice(
                         record = record,
