@@ -39,6 +39,8 @@ class RecordingService : Service() {
     private val recoveryHandler = Handler(Looper.getMainLooper())
     private var floatingControls: FloatingRecordingControls? = null
     private var replayDurationSeconds = InstantReplayDuration.Seconds60.seconds
+    @Volatile
+    private var recoveryCheckpointEnabled = false
     private var intentionalStop = false
 
     override fun onCreate() {
@@ -168,6 +170,7 @@ class RecordingService : Service() {
         }.onSuccess {
             RecordingSessionStore.markStarted()
             recoveryManager.markSessionActive()
+            recoveryCheckpointEnabled = true
             scheduleRecoveryCheckpoint()
             RecordingStateStore.transition(RecordingState.Recording)
             floatingControls?.show()
@@ -229,6 +232,8 @@ class RecordingService : Service() {
         RecordingStateStore.transition(RecordingState.Stopping)
         RecordingStateStore.transition(RecordingState.Processing)
 
+        recoveryCheckpointEnabled = false
+        cancelRecoveryCheckpoint()
         val highlights = RecordingSessionStore.snapshotHighlights()
         val saved = recorderEngine.stopAndSave()
         intentionalStop = true
@@ -256,7 +261,6 @@ class RecordingService : Service() {
             }
         }
 
-        cancelRecoveryCheckpoint()
         RecordingSessionStore.clear()
         floatingControls?.hide()
         stopForegroundAndSelf()
@@ -272,6 +276,8 @@ class RecordingService : Service() {
             RecordingStateStore.transition(RecordingState.Stopping)
             RecordingStateStore.transition(RecordingState.Processing)
 
+            recoveryCheckpointEnabled = false
+            cancelRecoveryCheckpoint()
             val highlights = RecordingSessionStore.snapshotHighlights()
             val saved = recorderEngine.stopAndSave()
             if (saved != null) {
@@ -299,6 +305,7 @@ class RecordingService : Service() {
             }
         }
 
+        recoveryCheckpointEnabled = false
         cancelRecoveryCheckpoint()
         if (!completedSafely) {
             recoveryManager.clearInterruptedFlag()
@@ -323,10 +330,15 @@ class RecordingService : Service() {
                     start = true,
                     name = "MemoryCapture-RecoveryCheckpoint",
                 ) {
-                    recorderEngine.writeRecoveryCheckpoint(
-                        targetFile = recoveryManager.checkpointFile,
+                    val written = recorderEngine.writeRecoveryCheckpoint(
+                        targetFile = recoveryManager.checkpointTempFile,
                         durationSeconds = RECOVERY_WINDOW_SECONDS,
                     )
+                    if (written && recoveryCheckpointEnabled) {
+                        recoveryManager.commitCheckpoint()
+                    } else {
+                        runCatching { recoveryManager.checkpointTempFile.delete() }
+                    }
                 }
                 recoveryHandler.postDelayed(this, RECOVERY_INTERVAL_MS)
             }
@@ -453,6 +465,7 @@ class RecordingService : Service() {
     }
 
     override fun onDestroy() {
+        recoveryCheckpointEnabled = false
         cancelRecoveryCheckpoint()
         floatingControls?.hide()
         if (recorderEngine.isActive()) {
