@@ -266,6 +266,8 @@ class RecordingService : Service() {
         if (intentionalStop) return
 
         val current = RecordingStateStore.state.value
+        var completedSafely = false
+
         if (current is RecordingState.Recording || current is RecordingState.Paused) {
             RecordingStateStore.transition(RecordingState.Stopping)
             RecordingStateStore.transition(RecordingState.Processing)
@@ -279,15 +281,27 @@ class RecordingService : Service() {
                     displayName = saved.displayName,
                     highlightsMillis = highlights,
                 )
+                recoveryManager.markSessionClosed()
                 RecordingStateStore.transition(RecordingState.Completed)
+                completedSafely = true
             } else {
-                RecordingStateStore.forceError(RecordingError.RecordingInterrupted)
+                val recovered = recoveryManager.recoverIfNeeded()
+                if (recovered != null) {
+                    SavedRecordingStore.setSaved(
+                        displayName = recovered.displayName,
+                        location = recovered.locationLabel,
+                    )
+                    RecordingStateStore.transition(RecordingState.Completed)
+                    completedSafely = true
+                } else {
+                    RecordingStateStore.forceError(RecordingError.RecordingInterrupted)
+                }
             }
         }
 
         cancelRecoveryCheckpoint()
-        if (saved != null) {
-            recoveryManager.markSessionClosed()
+        if (!completedSafely) {
+            recoveryManager.clearInterruptedFlag()
         }
         RecordingSessionStore.clear()
         intentionalStop = true
