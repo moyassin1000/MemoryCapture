@@ -19,6 +19,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.view.Surface
 import androidx.documentfile.provider.DocumentFile
@@ -72,6 +73,9 @@ class ScreenRecorderEngine(
 
     @Volatile
     private var abortDrain = false
+
+    @Volatile
+    private var lastVideoDrainHeartbeatElapsedMs = 0L
 
     private var videoTrackIndex = -1
     private var audioTrackIndex = -1
@@ -171,6 +175,7 @@ class ScreenRecorderEngine(
             outputHandle = output
             drainFailure = null
             abortDrain = false
+            lastVideoDrainHeartbeatElapsedMs = SystemClock.elapsedRealtime()
             paused = false
             started = true
 
@@ -598,6 +603,29 @@ class ScreenRecorderEngine(
     fun audioHealth(): AudioCaptureHealth =
         audioCaptureEngine?.health() ?: AudioCaptureHealth.NotRequested
 
+    fun isVideoDrainStalled(
+        nowElapsedMs: Long,
+        thresholdMs: Long,
+    ): Boolean =
+        started &&
+            !paused &&
+            drainThread?.isAlive == true &&
+            lastVideoDrainHeartbeatElapsedMs > 0L &&
+            nowElapsedMs - lastVideoDrainHeartbeatElapsedMs >= thresholdMs
+
+    fun isAudioCaptureStalled(
+        nowElapsedMs: Long,
+        thresholdMs: Long,
+    ): Boolean =
+        audioCaptureEngine?.isStalled(
+            nowElapsedMs = nowElapsedMs,
+            thresholdMs = thresholdMs,
+        ) == true
+
+    fun degradeStalledAudio() {
+        audioCaptureEngine?.stopAfterStall()
+    }
+
     fun hasFatalRuntimeFailure(): Boolean {
         if (drainFailure != null) return true
 
@@ -627,11 +655,16 @@ class ScreenRecorderEngine(
 
         try {
             while (!abortDrain) {
+                lastVideoDrainHeartbeatElapsedMs = SystemClock.elapsedRealtime()
+
                 when (val outputBufferIndex = codec.dequeueOutputBuffer(
                     bufferInfo,
                     DEQUEUE_TIMEOUT_US,
                 )) {
-                    MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                    MediaCodec.INFO_TRY_AGAIN_LATER -> {
+                        lastVideoDrainHeartbeatElapsedMs =
+                            SystemClock.elapsedRealtime()
+                    }
 
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         registerTrack(
