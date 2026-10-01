@@ -193,36 +193,36 @@ class ScreenRecorderEngine(
             }
 
             if (audioMode != AudioMode.None) {
-                localAudio = AudioCaptureEngine(context).also { audio ->
-                    audio.start(
-                        projection = projection,
-                        mode = audioMode,
-                        preferredMicDeviceId = preferredMicDeviceId,
-                        voipCaptureAssistEnabled = voipCaptureAssistEnabled,
-                        sink = object : AudioMuxerSink {
-                            override fun onAudioFormat(format: MediaFormat) {
-                                registerTrack(
-                                    kind = TrackKind.Audio,
-                                    format = format,
-                                    activeMuxer = localMuxer,
-                                )
-                            }
+                val audio = AudioCaptureEngine(context)
+                localAudio = audio
+                audio.start(
+                    projection = projection,
+                    mode = audioMode,
+                    preferredMicDeviceId = preferredMicDeviceId,
+                    voipCaptureAssistEnabled = voipCaptureAssistEnabled,
+                    sink = object : AudioMuxerSink {
+                        override fun onAudioFormat(format: MediaFormat) {
+                            registerTrack(
+                                kind = TrackKind.Audio,
+                                format = format,
+                                activeMuxer = localMuxer,
+                            )
+                        }
 
-                            override fun onAudioSample(
-                                buffer: ByteBuffer,
-                                info: MediaCodec.BufferInfo,
-                            ) {
-                                writeEncodedSample(
-                                    kind = TrackKind.Audio,
-                                    buffer = buffer,
-                                    info = info,
-                                    activeMuxer = localMuxer,
-                                )
-                            }
-                        },
-                    )
-                }
-                audioCaptureEngine = localAudio
+                        override fun onAudioSample(
+                            buffer: ByteBuffer,
+                            info: MediaCodec.BufferInfo,
+                        ) {
+                            writeEncodedSample(
+                                kind = TrackKind.Audio,
+                                buffer = buffer,
+                                info = info,
+                                activeMuxer = localMuxer,
+                            )
+                        }
+                    },
+                )
+                audioCaptureEngine = audio
             }
 
             localDisplay = projection.createVirtualDisplay(
@@ -496,7 +496,11 @@ class ScreenRecorderEngine(
             }.isSuccess
             if (!signaled) stoppedCleanly = false
 
-            activeAudio?.stopAndWait()
+            val audioStoppedCleanly = activeAudio?.stopAndWait() ?: true
+            if (!audioStoppedCleanly) {
+                stoppedCleanly = false
+            }
+
             val audioTrackReady = synchronized(muxerLock) {
                 expectedTrackCount == 1 || audioTrackIndex >= 0
             }
@@ -612,6 +616,10 @@ class ScreenRecorderEngine(
 
     fun refreshVoipCaptureStatus(): VoipCaptureStatus =
         audioCaptureEngine?.refreshVoipCaptureStatus()
+            ?: VoipCaptureStatus.Inactive
+
+    fun currentVoipCaptureStatus(): VoipCaptureStatus =
+        audioCaptureEngine?.voipCaptureStatus()
             ?: VoipCaptureStatus.Inactive
 
     fun isVideoDrainStalled(

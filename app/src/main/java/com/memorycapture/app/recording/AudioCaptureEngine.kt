@@ -81,8 +81,11 @@ class AudioCaptureEngine(
     @Volatile
     private var activeMicSource = MediaRecorder.AudioSource.MIC
 
+    @Volatile
+    private var accessibilityAssistEnabled = false
+
+    private val communicationRouteLock = Any()
     private var speakerAssistApplied = false
-    private var previousCommunicationDeviceId: Int? = null
     private var legacySpeakerWasOn = false
 
     @Volatile
@@ -129,96 +132,119 @@ class AudioCaptureEngine(
         check(minBuffer > 0) { "Unable to determine audio buffer size." }
         val bufferSize = max(minBuffer * 2, PCM_BUFFER_BYTES)
 
-        val localMic = if (
-            mode == AudioMode.Microphone || mode == AudioMode.DeviceAndMic
-        ) {
-            createMicrophoneRecord(
-                format = format,
-                bufferSize = bufferSize,
-                preferredMicDeviceId = preferredMicDeviceId,
-                audioSource = MediaRecorder.AudioSource.MIC,
-            )
-        } else {
-            null
-        }
+        var localMic: AudioRecord? = null
+        var localPlayback: AudioRecord? = null
+        var localEncoder: MediaCodec? = null
 
-        val localPlayback = if (
-            mode == AudioMode.DeviceAudio || mode == AudioMode.DeviceAndMic
-        ) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                createPlaybackRecord(
-                    projection = projection,
+        try {
+            localMic = if (
+                mode == AudioMode.Microphone || mode == AudioMode.DeviceAndMic
+            ) {
+                createMicrophoneRecord(
                     format = format,
                     bufferSize = bufferSize,
+                    preferredMicDeviceId = preferredMicDeviceId,
+                    audioSource = MediaRecorder.AudioSource.MIC,
                 )
             } else {
-                error("Internal device audio capture requires Android 10 or newer.")
+                null
             }
-        } else {
-            null
-        }
 
-        val audioFormat = MediaFormat.createAudioFormat(
-            AUDIO_MIME,
-            SAMPLE_RATE,
-            CHANNEL_COUNT,
-        ).apply {
-            setInteger(
-                MediaFormat.KEY_AAC_PROFILE,
-                MediaCodecInfo.CodecProfileLevel.AACObjectLC,
-            )
-            setInteger(MediaFormat.KEY_BIT_RATE, AUDIO_BIT_RATE)
-            setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, bufferSize)
-        }
+            localPlayback = if (
+                mode == AudioMode.DeviceAudio || mode == AudioMode.DeviceAndMic
+            ) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    createPlaybackRecord(
+                        projection = projection,
+                        format = format,
+                        bufferSize = bufferSize,
+                    )
+                } else {
+                    error("Internal device audio capture requires Android 10 or newer.")
+                }
+            } else {
+                null
+            }
 
-        val localEncoder = MediaCodec.createEncoderByType(AUDIO_MIME).apply {
-            configure(
-                audioFormat,
-                null,
-                null,
-                MediaCodec.CONFIGURE_FLAG_ENCODE,
-            )
-            start()
-        }
+            val audioFormat = MediaFormat.createAudioFormat(
+                AUDIO_MIME,
+                SAMPLE_RATE,
+                CHANNEL_COUNT,
+            ).apply {
+                setInteger(
+                    MediaFormat.KEY_AAC_PROFILE,
+                    MediaCodecInfo.CodecProfileLevel.AACObjectLC,
+                )
+                setInteger(MediaFormat.KEY_BIT_RATE, AUDIO_BIT_RATE)
+                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, bufferSize)
+            }
 
-        microphoneRecord = localMic
-        playbackRecord = localPlayback
-        encoder = localEncoder
-        submittedFrames = 0L
-        failure = null
-        runtimeHealth = AudioCaptureHealth.Healthy
-        voipStatus = VoipCaptureStatus.Inactive
-        voipAssistEnabled = voipCaptureAssistEnabled
-        callMicSilencedBySystem = false
-        activeMicSource = MediaRecorder.AudioSource.MIC
-        previousCommunicationDeviceId = null
-        lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
-        paused = false
-        running = true
+            localEncoder = MediaCodec.createEncoderByType(AUDIO_MIME).apply {
+                configure(
+                    audioFormat,
+                    null,
+                    null,
+                    MediaCodec.CONFIGURE_FLAG_ENCODE,
+                )
+                start()
+            }
 
-        localMic?.startRecording()
-        localPlayback?.startRecording()
+            localMic?.startRecording()
+            localPlayback?.startRecording()
 
-        worker = thread(
-            start = true,
-            name = "MemoryCapture-AudioEncoder",
-        ) {
-            captureLoop(
-                mode = mode,
-                activeEncoder = localEncoder,
-                initialMic = localMic,
-                playback = localPlayback,
-                audioFormat = format,
-                preferredMicDeviceId = preferredMicDeviceId,
-                bufferSize = bufferSize,
-                sink = sink,
-            )
+            val activeEncoder = requireNotNull(localEncoder)
+            microphoneRecord = localMic
+            playbackRecord = localPlayback
+            encoder = activeEncoder
+            submittedFrames = 0L
+            failure = null
+            runtimeHealth = AudioCaptureHealth.Healthy
+            voipStatus = VoipCaptureStatus.Inactive
+            voipAssistEnabled = voipCaptureAssistEnabled
+            callMicSilencedBySystem = false
+            activeMicSource = MediaRecorder.AudioSource.MIC
+            accessibilityAssistEnabled =
+                CallCaptureCompatibility.isAccessibilityAssistEnabled(context)
+            lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
+            paused = false
+            running = true
+
+            worker = thread(
+                start = true,
+                name = "MemoryCapture-AudioEncoder",
+            ) {
+                captureLoop(
+                    mode = mode,
+                    activeEncoder = activeEncoder,
+                    initialMic = localMic,
+                    playback = localPlayback,
+                    audioFormat = format,
+                    preferredMicDeviceId = preferredMicDeviceId,
+                    bufferSize = bufferSize,
+                    sink = sink,
+                )
+            }
+        } catch (error: Throwable) {
+            running = false
+            paused = false
+            runCatching { localMic?.stop() }
+            runCatching { localPlayback?.stop() }
+            runCatching { localMic?.release() }
+            runCatching { localPlayback?.release() }
+            runCatching { localEncoder?.stop() }
+            runCatching { localEncoder?.release() }
+            microphoneRecord = null
+            playbackRecord = null
+            encoder = null
+            worker = null
+            throw error
         }
     }
-
     fun pause() {
         if (!running || paused) return
         paused = true
+        restoreSpeakerAssist()
+        voipStatus = VoipCaptureStatus.Inactive
         runCatching { microphoneRecord?.stop() }
         runCatching { playbackRecord?.stop() }
     }
@@ -238,24 +264,43 @@ class AudioCaptureEngine(
         }
     }
 
-    fun stopAndWait() {
-        if (!running && worker == null) return
+    fun stopAndWait(): Boolean {
+        val activeWorker = worker
+        if (!running && activeWorker == null) return true
+
         running = false
         paused = false
+        restoreSpeakerAssist()
         runCatching { microphoneRecord?.stop() }
         runCatching { playbackRecord?.stop() }
 
         try {
-            worker?.join(STOP_JOIN_TIMEOUT_MS)
+            activeWorker?.join(STOP_JOIN_TIMEOUT_MS)
+
+            if (activeWorker?.isAlive == true) {
+                activeWorker.interrupt()
+                activeWorker.join(STOP_INTERRUPT_JOIN_TIMEOUT_MS)
+            }
+
+            if (activeWorker?.isAlive == true) {
+                runCatching { encoder?.stop() }
+                runCatching { encoder?.release() }
+                activeWorker.interrupt()
+                activeWorker.join(STOP_FORCE_JOIN_TIMEOUT_MS)
+            }
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
 
-        if (worker?.isAlive == true) {
-            worker?.interrupt()
+        val stoppedCleanly = activeWorker?.isAlive != true
+        if (!stoppedCleanly) {
+            failure = failure ?: IllegalStateException(
+                "Audio worker did not stop before muxer finalization.",
+            )
         }
 
         clearReferences()
+        return stoppedCleanly
     }
 
     fun abort() {
@@ -292,6 +337,8 @@ class AudioCaptureEngine(
         var micSourceIndex = 0
         var lastMicProbeElapsedMs = 0L
         var lastMicRecoveryAttemptElapsedMs = 0L
+        var lastCommunicationActive = false
+        var lastSpeakerAssistAttemptElapsedMs = 0L
 
         try {
             while (running && !Thread.currentThread().isInterrupted) {
@@ -308,6 +355,56 @@ class AudioCaptureEngine(
                     mode == AudioMode.Microphone || mode == AudioMode.DeviceAndMic
 
                 if (
+                    communicationActive &&
+                    !lastCommunicationActive &&
+                    microphoneRequested &&
+                    accessibilityAssistEnabled &&
+                    mic != null &&
+                    micSourceIndex == 0
+                ) {
+                    val replacement = replaceMicrophoneRecord(
+                        current = mic,
+                        format = audioFormat,
+                        bufferSize = bufferSize,
+                        preferredMicDeviceId = preferredMicDeviceId,
+                        audioSource = MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    )
+                    if (replacement !== mic) {
+                        mic = replacement
+                        micAvailable = true
+                        updateRuntimeHealth(
+                            mode = mode,
+                            micAvailable = true,
+                            playbackAvailable = playbackAvailable,
+                        )
+                        micSourceIndex = 1
+                        callMicSilencedBySystem = false
+                    }
+                }
+
+                if (communicationActive) {
+                    if (
+                        voipAssistEnabled &&
+                        nowElapsedMs - lastSpeakerAssistAttemptElapsedMs >=
+                            SPEAKER_ASSIST_REASSERT_INTERVAL_MS
+                    ) {
+                        lastSpeakerAssistAttemptElapsedMs = nowElapsedMs
+                        applySpeakerAssist()
+                    }
+                    voipStatus = when {
+                        callMicSilencedBySystem -> VoipCaptureStatus.SilencedBySystem
+                        microphoneRecord == null -> VoipCaptureStatus.NoMicrophonePath
+                        speakerAssistApplied -> VoipCaptureStatus.SpeakerAssistActive
+                        else -> VoipCaptureStatus.CallDetected
+                    }
+                } else if (lastCommunicationActive) {
+                    restoreSpeakerAssist()
+                    callMicSilencedBySystem = false
+                    voipStatus = VoipCaptureStatus.Inactive
+                }
+                lastCommunicationActive = communicationActive
+
+                if (
                     microphoneRequested &&
                     voipAssistEnabled &&
                     micAvailable &&
@@ -322,6 +419,7 @@ class AudioCaptureEngine(
                     if (
                         communicationActive &&
                         silenced &&
+                        accessibilityAssistEnabled &&
                         micSourceIndex < CALL_MIC_AUDIO_SOURCES.lastIndex
                     ) {
                         val nextIndex = micSourceIndex + 1
@@ -332,9 +430,14 @@ class AudioCaptureEngine(
                             preferredMicDeviceId = preferredMicDeviceId,
                             audioSource = CALL_MIC_AUDIO_SOURCES[nextIndex],
                         )
-                        if (replacement != null) {
+                        if (replacement != null && replacement !== mic) {
                             mic = replacement
                             micAvailable = true
+                            updateRuntimeHealth(
+                                mode = mode,
+                                micAvailable = true,
+                                playbackAvailable = playbackAvailable,
+                            )
                             micSourceIndex = nextIndex
                             lastMicRecoveryAttemptElapsedMs = nowElapsedMs
                             callMicSilencedBySystem = false
@@ -350,7 +453,10 @@ class AudioCaptureEngine(
                         CALL_MIC_RECOVERY_INTERVAL_MS
                 ) {
                     lastMicRecoveryAttemptElapsedMs = nowElapsedMs
-                    val targetIndex = if (communicationActive) {
+                    val targetIndex = if (
+                        communicationActive &&
+                        accessibilityAssistEnabled
+                    ) {
                         (micSourceIndex + 1)
                             .coerceAtMost(CALL_MIC_AUDIO_SOURCES.lastIndex)
                     } else {
@@ -363,9 +469,14 @@ class AudioCaptureEngine(
                         preferredMicDeviceId = preferredMicDeviceId,
                         audioSource = CALL_MIC_AUDIO_SOURCES[targetIndex],
                     )
-                    if (replacement != null) {
+                    if (replacement != null && replacement !== mic) {
                         mic = replacement
                         micAvailable = true
+                        updateRuntimeHealth(
+                            mode = mode,
+                            micAvailable = true,
+                            playbackAvailable = playbackAvailable,
+                        )
                         micSourceIndex = targetIndex
                         callMicSilencedBySystem = false
                     }
@@ -387,9 +498,14 @@ class AudioCaptureEngine(
                         preferredMicDeviceId = preferredMicDeviceId,
                         audioSource = MediaRecorder.AudioSource.MIC,
                     )
-                    if (replacement != null) {
+                    if (replacement != null && replacement !== mic) {
                         mic = replacement
                         micAvailable = true
+                        updateRuntimeHealth(
+                            mode = mode,
+                            micAvailable = true,
+                            playbackAvailable = playbackAvailable,
+                        )
                         micSourceIndex = 0
                         callMicSilencedBySystem = false
                     }
@@ -399,25 +515,15 @@ class AudioCaptureEngine(
                     val read = readAudio(mic, micBuffer)
                     if (read < 0) {
                         micAvailable = false
-                        if (!voipAssistEnabled) {
-                            updateRuntimeHealth(
-                                mode = mode,
-                                micAvailable = false,
-                                playbackAvailable = playbackAvailable,
-                            )
-                        }
+                        updateRuntimeHealth(
+                            mode = mode,
+                            micAvailable = false,
+                            playbackAvailable = playbackAvailable,
+                        )
                         0
                     } else {
                         read
                     }
-                } else if (
-                    microphoneRequested &&
-                    voipAssistEnabled
-                ) {
-                    val silenceBytes =
-                        minOf(SYNTHETIC_SILENCE_BYTES, micBuffer.size).and(-2)
-                    micBuffer.fill(0, 0, silenceBytes)
-                    silenceBytes
                 } else {
                     0
                 }
@@ -446,21 +552,38 @@ class AudioCaptureEngine(
 
                 lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
 
+                var syntheticMicFrame = false
+                val effectiveMicBytes =
+                    if (
+                        microphoneRequested &&
+                        voipAssistEnabled &&
+                        micBytes <= 0 &&
+                        !micAvailable
+                    ) {
+                        syntheticMicFrame = true
+                        val silenceBytes =
+                            minOf(SYNTHETIC_SILENCE_BYTES, micBuffer.size).and(-2)
+                        micBuffer.fill(0, 0, silenceBytes)
+                        silenceBytes
+                    } else {
+                        micBytes
+                    }
+
                 val bytes = when (mode) {
                     AudioMode.None -> 0
-                    AudioMode.Microphone -> micBytes
+                    AudioMode.Microphone -> effectiveMicBytes
                     AudioMode.DeviceAudio -> playbackBytes
                     AudioMode.DeviceAndMic -> {
                         if (communicationActive) {
                             copyPcm16(
                                 source = micBuffer,
-                                byteCount = micBytes,
+                                byteCount = effectiveMicBytes,
                                 out = mixedBuffer,
                             )
                         } else {
-                            mixPcm16(
+                            Pcm16Mixer.mix(
                                 micBuffer = micBuffer,
-                                micBytes = micBytes,
+                                micBytes = effectiveMicBytes,
                                 playbackBuffer = playbackBuffer,
                                 playbackBytes = playbackBytes,
                                 out = mixedBuffer,
@@ -485,13 +608,7 @@ class AudioCaptureEngine(
                     waitForEos = false,
                 )
 
-                if (
-                    microphoneRequested &&
-                    voipAssistEnabled &&
-                    !micAvailable &&
-                    bytes > 0 &&
-                    (communicationActive || !playbackAvailable)
-                ) {
+                if (syntheticMicFrame && bytes > 0) {
                     Thread.sleep(SYNTHETIC_SILENCE_PACE_MS)
                 } else if (bytes == 0 && (micAvailable || playbackAvailable)) {
                     Thread.sleep(AUDIO_IDLE_BACKOFF_MS)
@@ -648,8 +765,8 @@ class AudioCaptureEngine(
         record.read(
             target,
             0,
-            target.size,
-            AudioRecord.READ_BLOCKING,
+            minOf(target.size, PCM_READ_CHUNK_BYTES),
+            AudioRecord.READ_NON_BLOCKING,
         )
 
     private fun updateRuntimeHealth(
@@ -685,50 +802,7 @@ class AudioCaptureEngine(
 
     fun health(): AudioCaptureHealth = runtimeHealth
 
-    fun refreshVoipCaptureStatus(): VoipCaptureStatus {
-        if (!running || paused) {
-            restoreSpeakerAssist()
-            voipStatus = VoipCaptureStatus.Inactive
-            return voipStatus
-        }
-
-        val communicationActive = isCommunicationActive()
-
-        if (!communicationActive) {
-            restoreSpeakerAssist()
-            voipStatus = VoipCaptureStatus.Inactive
-            return voipStatus
-        }
-
-        val mic = microphoneRecord
-        if (callMicSilencedBySystem) {
-            if (voipAssistEnabled) {
-                applySpeakerAssist()
-            }
-            voipStatus = VoipCaptureStatus.SilencedBySystem
-            return voipStatus
-        }
-
-        if (mic == null) {
-            restoreSpeakerAssist()
-            voipStatus = VoipCaptureStatus.NoMicrophonePath
-            return voipStatus
-        }
-
-        if (voipAssistEnabled) {
-            applySpeakerAssist()
-        } else {
-            restoreSpeakerAssist()
-        }
-
-        val silenced = isMicrophoneSilencedBySystem(mic)
-        voipStatus = when {
-            silenced -> VoipCaptureStatus.SilencedBySystem
-            speakerAssistApplied -> VoipCaptureStatus.SpeakerAssistActive
-            else -> VoipCaptureStatus.CallDetected
-        }
-        return voipStatus
-    }
+    fun refreshVoipCaptureStatus(): VoipCaptureStatus = voipStatus
 
     fun voipCaptureStatus(): VoipCaptureStatus = voipStatus
 
@@ -769,123 +843,64 @@ class AudioCaptureEngine(
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
 
         return runCatching {
-            audioManager.activeRecordingConfigurations
-                .firstOrNull { configuration ->
-                    configuration.clientAudioSessionId == record.audioSessionId
-                }
-                ?.isClientSilenced == true
+            record.activeRecordingConfiguration?.isClientSilenced
+                ?: audioManager.activeRecordingConfigurations
+                    .firstOrNull { configuration ->
+                        configuration.clientAudioSessionId == record.audioSessionId
+                    }
+                    ?.isClientSilenced
+                ?: false
         }.getOrDefault(false)
     }
 
     private fun applySpeakerAssist() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val speaker = audioManager.availableCommunicationDevices
-                .firstOrNull { device ->
-                    device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
-                }
+        synchronized(communicationRouteLock) {
+            if (!running || paused || !voipAssistEnabled) return
 
-            if (speaker != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val speaker = audioManager.availableCommunicationDevices
+                    .firstOrNull { device ->
+                        device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                    }
+
+                if (speaker != null) {
+                    val alreadyOnSpeaker =
+                        audioManager.communicationDevice?.id == speaker.id
+                    speakerAssistApplied = alreadyOnSpeaker || runCatching {
+                        audioManager.setCommunicationDevice(speaker)
+                    }.getOrDefault(false)
+                }
+                return
+            }
+
+            @Suppress("DEPRECATION")
+            runCatching {
                 if (!speakerAssistApplied) {
-                    previousCommunicationDeviceId =
-                        audioManager.communicationDevice?.id
+                    legacySpeakerWasOn = audioManager.isSpeakerphoneOn
                 }
-
-                val alreadyOnSpeaker =
-                    audioManager.communicationDevice?.id == speaker.id
-                speakerAssistApplied = alreadyOnSpeaker || runCatching {
-                    audioManager.setCommunicationDevice(speaker)
-                }.getOrDefault(false)
+                if (!audioManager.isSpeakerphoneOn) {
+                    audioManager.isSpeakerphoneOn = true
+                }
+                speakerAssistApplied = audioManager.isSpeakerphoneOn
             }
-            return
-        }
-
-        @Suppress("DEPRECATION")
-        runCatching {
-            if (!speakerAssistApplied) {
-                legacySpeakerWasOn = audioManager.isSpeakerphoneOn
-            }
-            if (!audioManager.isSpeakerphoneOn) {
-                audioManager.isSpeakerphoneOn = true
-            }
-            speakerAssistApplied = audioManager.isSpeakerphoneOn
         }
     }
 
     private fun restoreSpeakerAssist() {
-        if (!speakerAssistApplied) return
+        synchronized(communicationRouteLock) {
+            if (!speakerAssistApplied) return
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val previousId = previousCommunicationDeviceId
-            val restored = previousId?.let { id ->
-                audioManager.availableCommunicationDevices
-                    .firstOrNull { it.id == id }
-                    ?.let { device ->
-                        runCatching {
-                            audioManager.setCommunicationDevice(device)
-                        }.getOrDefault(false)
-                    }
-            } == true
-
-            if (!restored) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 runCatching { audioManager.clearCommunicationDevice() }
+            } else {
+                @Suppress("DEPRECATION")
+                runCatching {
+                    audioManager.isSpeakerphoneOn = legacySpeakerWasOn
+                }
             }
-            previousCommunicationDeviceId = null
-        } else {
-            @Suppress("DEPRECATION")
-            runCatching {
-                audioManager.isSpeakerphoneOn = legacySpeakerWasOn
-            }
+
+            speakerAssistApplied = false
         }
-
-        speakerAssistApplied = false
-    }
-
-    private fun mixPcm16(
-        micBuffer: ByteArray,
-        micBytes: Int,
-        playbackBuffer: ByteArray,
-        playbackBytes: Int,
-        out: ByteArray,
-    ): Int {
-        if (micBytes <= 0 && playbackBytes <= 0) return 0
-
-        if (micBytes <= 0) {
-            val bytes = playbackBytes.coerceAtLeast(0).and(-2)
-            playbackBuffer.copyInto(out, endIndex = bytes)
-            return bytes
-        }
-
-        if (playbackBytes <= 0) {
-            val bytes = micBytes.coerceAtLeast(0).and(-2)
-            micBuffer.copyInto(out, endIndex = bytes)
-            return bytes
-        }
-
-        val bytes = minOf(micBytes, playbackBytes)
-            .coerceAtLeast(0)
-            .and(-2)
-
-        var index = 0
-        while (index < bytes) {
-            val mic = (
-                (micBuffer[index].toInt() and 0xFF) or
-                    (micBuffer[index + 1].toInt() shl 8)
-                ).toShort().toInt()
-
-            val playback = (
-                (playbackBuffer[index].toInt() and 0xFF) or
-                    (playbackBuffer[index + 1].toInt() shl 8)
-                ).toShort().toInt()
-
-            val mixed = ((mic + playback) / 2)
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-
-            out[index] = (mixed and 0xFF).toByte()
-            out[index + 1] = ((mixed shr 8) and 0xFF).toByte()
-            index += 2
-        }
-
-        return bytes
     }
 
     private fun createMicrophoneRecord(
@@ -893,24 +908,28 @@ class AudioCaptureEngine(
         bufferSize: Int,
         preferredMicDeviceId: Int,
         audioSource: Int,
-    ): AudioRecord =
-        AudioRecord.Builder()
+    ): AudioRecord {
+        val builder = AudioRecord.Builder()
             .setAudioSource(audioSource)
             .setAudioFormat(format)
             .setBufferSizeInBytes(bufferSize)
-            .build()
-            .also { record ->
-                check(record.state == AudioRecord.STATE_INITIALIZED) {
-                    "Unable to initialize microphone capture source: $audioSource"
-                }
-                activeMicSource = audioSource
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    applyPreferredMicrophoneDevice(
-                        record = record,
-                        deviceId = preferredMicDeviceId,
-                    )
-                }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            builder.setPrivacySensitive(false)
+        }
+
+        return builder.build().also { record ->
+            check(record.state == AudioRecord.STATE_INITIALIZED) {
+                "Unable to initialize microphone capture source: $audioSource"
             }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                applyPreferredMicrophoneDevice(
+                    record = record,
+                    deviceId = preferredMicDeviceId,
+                )
+            }
+        }
+    }
 
     private fun replaceMicrophoneRecord(
         current: AudioRecord?,
@@ -919,22 +938,42 @@ class AudioCaptureEngine(
         preferredMicDeviceId: Int,
         audioSource: Int,
     ): AudioRecord? {
-        runCatching { current?.stop() }
-        runCatching { current?.release() }
+        if (!running || paused) return current
 
+        runCatching { current?.stop() }
+
+        var candidate: AudioRecord? = null
         val replacement = runCatching {
             createMicrophoneRecord(
                 format = format,
                 bufferSize = bufferSize,
                 preferredMicDeviceId = preferredMicDeviceId,
                 audioSource = audioSource,
-            ).also { it.startRecording() }
-        }.getOrNull()
-
-        microphoneRecord = replacement
-        if (replacement == null) {
-            activeMicSource = MediaRecorder.AudioSource.MIC
+            ).also {
+                candidate = it
+                it.startRecording()
+            }
+        }.getOrElse {
+            runCatching { candidate?.stop() }
+            runCatching { candidate?.release() }
+            null
         }
+
+        if (replacement == null || !running || paused) {
+            if (replacement != null) {
+                runCatching { replacement.stop() }
+                runCatching { replacement.release() }
+            }
+            if (running && !paused) {
+                runCatching { current?.startRecording() }
+            }
+            microphoneRecord = current
+            return current
+        }
+
+        runCatching { current?.release() }
+        microphoneRecord = replacement
+        activeMicSource = audioSource
         return replacement
     }
 
@@ -991,6 +1030,7 @@ class AudioCaptureEngine(
         voipStatus = VoipCaptureStatus.Inactive
         callMicSilencedBySystem = false
         activeMicSource = MediaRecorder.AudioSource.MIC
+        accessibilityAssistEnabled = false
         if (runtimeHealth == AudioCaptureHealth.Healthy && failure != null) {
             runtimeHealth = AudioCaptureHealth.AllAudioLost
         }
@@ -1005,14 +1045,19 @@ class AudioCaptureEngine(
         private const val BYTES_PER_FRAME = 2
         private const val CODEC_TIMEOUT_US = 10_000L
         private const val STOP_JOIN_TIMEOUT_MS = 5_000L
+        private const val STOP_INTERRUPT_JOIN_TIMEOUT_MS = 1_000L
+        private const val STOP_FORCE_JOIN_TIMEOUT_MS = 1_000L
         private const val ABORT_JOIN_TIMEOUT_MS = 1_000L
         private const val PAUSE_POLL_MS = 20L
         private const val AUDIO_IDLE_BACKOFF_MS = 5L
         private const val CALL_MIC_PROBE_INTERVAL_MS = 1_000L
         private const val CALL_MIC_RECOVERY_INTERVAL_MS = 1_000L
-        private const val SYNTHETIC_SILENCE_PACE_MS = 20L
+        private const val SPEAKER_ASSIST_REASSERT_INTERVAL_MS = 500L
+        private const val AUDIO_FRAME_MS = 20L
+        private const val SYNTHETIC_SILENCE_PACE_MS = AUDIO_FRAME_MS
         private const val SYNTHETIC_SILENCE_BYTES =
             SAMPLE_RATE * BYTES_PER_FRAME / 50
+        private const val PCM_READ_CHUNK_BYTES = SYNTHETIC_SILENCE_BYTES
         private val CALL_MIC_AUDIO_SOURCES = intArrayOf(
             MediaRecorder.AudioSource.MIC,
             MediaRecorder.AudioSource.VOICE_RECOGNITION,

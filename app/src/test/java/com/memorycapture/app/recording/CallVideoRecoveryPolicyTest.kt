@@ -118,4 +118,57 @@ class CallVideoRecoveryPolicyTest {
         )
         assertEquals(0, policy.attemptsForTest())
     }
+    @Test
+    fun noCallContext_neverTriggersRebind() {
+        val policy = CallVideoRecoveryPolicy(
+            postCallRebindThresholdMs = 1_000L,
+        )
+
+        assertFalse(
+            policy.shouldAttemptRebind(
+                callActive = false,
+                callJustEnded = false,
+                frameAgeMs = 30_000L,
+                nowElapsedMs = 30_000L,
+            ),
+        )
+        assertFalse(policy.postCallRecoveryActiveForTest())
+    }
+
+    @Test
+    fun exhaustedPostCallRecovery_isReportedOnlyAfterCall() {
+        val policy = CallVideoRecoveryPolicy(
+            postCallRebindThresholdMs = 1_000L,
+            retryIntervalMs = 1L,
+            maxAttempts = 2,
+        )
+
+        assertTrue(
+            policy.shouldAttemptRebind(
+                callActive = false,
+                callJustEnded = true,
+                frameAgeMs = 2_000L,
+                nowElapsedMs = 2_000L,
+            ),
+        )
+        policy.recordAttempt(2_000L)
+
+        assertTrue(
+            policy.shouldAttemptRebind(
+                callActive = false,
+                callJustEnded = false,
+                frameAgeMs = 3_000L,
+                nowElapsedMs = 3_000L,
+            ),
+        )
+        policy.recordAttempt(3_000L)
+
+        assertTrue(
+            policy.hasExhaustedPostCallRecovery(
+                callActive = false,
+                frameAgeMs = 3_000L,
+            ),
+        )
+    }
+
 }
