@@ -644,6 +644,30 @@ class ScreenRecorderEngine(
         return audioStoppedBeforeTrackReady
     }
 
+    fun performLongSessionMaintenance(
+        cleanReplayExports: Boolean,
+    ) {
+        replayBuffer?.maintenance()
+
+        if (cleanReplayExports) {
+            val directory = File(context.cacheDir, "instant_replay_exports")
+            val cutoff = System.currentTimeMillis() - STALE_REPLAY_EXPORT_MS
+
+            directory.listFiles()?.forEach { file ->
+                if (
+                    file.isFile &&
+                    file.lastModified() in 1 until cutoff
+                ) {
+                    runCatching { file.delete() }
+                }
+            }
+
+            if (directory.listFiles()?.isEmpty() == true) {
+                runCatching { directory.delete() }
+            }
+        }
+    }
+
     fun estimatedOutputBytesPerSecond(): Long =
         estimatedBytesPerSecond.coerceAtLeast(MIN_ESTIMATED_BYTES_PER_SECOND)
 
@@ -1298,6 +1322,7 @@ class ScreenRecorderEngine(
         private const val AUDIO_ESTIMATED_BIT_RATE = 128_000L
         private const val MIN_ESTIMATED_BYTES_PER_SECOND = 256_000L
         private const val MAX_REPLAY_DURATION_US = 180_000_000L
+        private const val STALE_REPLAY_EXPORT_MS = 15L * 60L * 1_000L
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 8_000L
         private const val DRAIN_ABORT_JOIN_TIMEOUT_MS = 1_500L
