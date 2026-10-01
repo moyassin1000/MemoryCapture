@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -23,6 +24,8 @@ import com.memorycapture.app.data.recordings.RecordingHighlightRepository
 import com.memorycapture.app.R
 import com.memorycapture.app.projection.MediaProjectionController
 import com.memorycapture.app.recording.GuardianThermalLevel
+import com.memorycapture.app.recording.LongSessionWatchdog
+import com.memorycapture.app.recording.LongSessionWatchdogInput
 import com.memorycapture.app.recording.RecordingError
 import com.memorycapture.app.recording.RecordingGuardianStatus
 import com.memorycapture.app.recording.RecordingGuardianStore
@@ -49,11 +52,15 @@ class RecordingService : Service() {
     private var replayDurationSeconds = InstantReplayDuration.Seconds60.seconds
     private val screenshotInFlight = AtomicBoolean(false)
     private val replaySaveInFlight = AtomicBoolean(false)
+    private val maintenanceInFlight = AtomicBoolean(false)
+    private val longSessionWatchdog = LongSessionWatchdog()
     @Volatile
     private var recoveryCheckpointEnabled = false
     @Volatile
     private var recoveryCheckpointInFlight = false
     private var recordingTreeUri: String? = null
+    @Volatile
+    private var lastMaintenanceElapsedMs = 0L
     private var guardianStopInProgress = false
     @Volatile
     private var finalizationInFlight = false
@@ -208,6 +215,8 @@ class RecordingService : Service() {
             recoveryManager.markSessionActive()
             recoveryCheckpointEnabled = true
             guardianStopInProgress = false
+            longSessionWatchdog.reset()
+            lastMaintenanceElapsedMs = SystemClock.elapsedRealtime()
             scheduleRecoveryCheckpoint()
             scheduleGuardian()
             RecordingStateStore.transition(RecordingState.Recording)
@@ -428,6 +437,8 @@ class RecordingService : Service() {
                 name = "MemoryCapture-RecoveryCheckpoint",
             ) {
                 try {
+                    recoveryManager.repairActiveSessionArtifacts()
+
                     val written = recorderEngine.writeRecoveryCheckpoint(
                         targetFile = recoveryManager.checkpointTempFile,
                         durationSeconds = RECOVERY_WINDOW_SECONDS,
@@ -542,7 +553,26 @@ class RecordingService : Service() {
                     ?: false
 
             val thermalDanger = currentThermalStatusRaw() >= THERMAL_EMERGENCY_STATUS
-            val runtimeFailure = recorderEngine.hasFatalRuntimeFailure()
+            val nowElapsedMs = SystemClock.elapsedRealtime()
+            val watchdogDecision = longSessionWatchdog.evaluate(
+                LongSessionWatchdogInput(
+                    fatalRuntimeFailure = recorderEngine.hasFatalRuntimeFailure(),
+                    videoDrainStalled = recorderEngine.isVideoDrainStalled(
+                        nowElapsedMs = nowElapsedMs,
+                        thresholdMs = VIDEO_DRAIN_STALL_THRESHOLD_MS,
+                    ),
+                    audioCaptureStalled = recorderEngine.isAudioCaptureStalled(
+                        nowElapsedMs = nowElapsedMs,
+                        thresholdMs = AUDIO_STALL_THRESHOLD_MS,
+                    ),
+                ),
+            )
+
+            if (watchdogDecision.degradeAudio) {
+                recorderEngine.degradeStalledAudio()
+            }
+
+            scheduleLongSessionMaintenance(nowElapsedMs)
 
             if (
                 !guardianStopInProgress &&
@@ -550,7 +580,7 @@ class RecordingService : Service() {
                     destinationDanger ||
                         workspaceDanger ||
                         thermalDanger ||
-                        runtimeFailure
+                        watchdogDecision.stopRecording
                     ) &&
                 (
                     RecordingStateStore.state.value is RecordingState.Recording ||
@@ -573,6 +603,31 @@ class RecordingService : Service() {
 
     private fun cancelGuardian() {
         guardianHandler.removeCallbacks(guardianRunnable)
+        longSessionWatchdog.reset()
+    }
+
+    private fun scheduleLongSessionMaintenance(nowElapsedMs: Long) {
+        if (
+            finalizationInFlight ||
+            nowElapsedMs - lastMaintenanceElapsedMs < MAINTENANCE_INTERVAL_MS ||
+            !maintenanceInFlight.compareAndSet(false, true)
+        ) {
+            return
+        }
+
+        thread(
+            start = true,
+            name = "MemoryCapture-LongSessionMaintenance",
+        ) {
+            try {
+                recorderEngine.performLongSessionMaintenance(
+                    cleanReplayExports = !replaySaveInFlight.get(),
+                )
+            } finally {
+                lastMaintenanceElapsedMs = SystemClock.elapsedRealtime()
+                maintenanceInFlight.set(false)
+            }
+        }
     }
 
     private fun currentThermalStatusRaw(): Int =
@@ -745,6 +800,9 @@ class RecordingService : Service() {
         private const val RECOVERY_INTERVAL_MS = 30_000L
         private const val RECOVERY_WINDOW_SECONDS = 60
         private const val GUARDIAN_INTERVAL_MS = 5_000L
+        private const val VIDEO_DRAIN_STALL_THRESHOLD_MS = 20_000L
+        private const val AUDIO_STALL_THRESHOLD_MS = 15_000L
+        private const val MAINTENANCE_INTERVAL_MS = 60_000L
         private const val STORAGE_WARNING_BYTES = 500L * 1024L * 1024L
         private const val STORAGE_STOP_BYTES = 120L * 1024L * 1024L
         private const val STORAGE_WARNING_SECONDS = 180L
