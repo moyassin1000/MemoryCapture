@@ -22,7 +22,6 @@ import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.data.recordings.RecordingHighlightRepository
 import com.memorycapture.app.R
 import com.memorycapture.app.projection.MediaProjectionController
-import com.memorycapture.app.recording.AudioCaptureHealth
 import com.memorycapture.app.recording.GuardianThermalLevel
 import com.memorycapture.app.recording.RecordingError
 import com.memorycapture.app.recording.RecordingGuardianStatus
