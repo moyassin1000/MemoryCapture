@@ -42,6 +42,7 @@
 
         <service
             android:name=".service.CallCaptureAccessibilityService"
+            android:label="@string/enhanced_call_compat_title"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
             <intent-filter>
