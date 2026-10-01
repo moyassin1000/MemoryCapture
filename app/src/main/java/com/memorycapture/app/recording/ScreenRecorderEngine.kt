@@ -417,7 +417,11 @@ class ScreenRecorderEngine(
             return null
         }
 
-        return importReplayFile(tempFile)
+        val imported = importReplayFile(tempFile)
+        if (imported == null) {
+            runCatching { tempFile.delete() }
+        }
+        return imported
     }
 
     @Synchronized
