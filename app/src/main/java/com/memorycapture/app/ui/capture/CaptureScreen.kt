@@ -5,6 +5,7 @@ import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
+import android.os.PowerManager
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -101,6 +102,14 @@ fun CaptureScreen(
             CallCaptureCompatibility.isAccessibilityAssistEnabled(context),
         )
     }
+    val powerManager = remember {
+        context.getSystemService(PowerManager::class.java)
+    }
+    var batteryOptimizationRestricted by remember {
+        mutableStateOf(
+            !powerManager.isIgnoringBatteryOptimizations(context.packageName),
+        )
+    }
     val storageLabel by preferences.storageLabel.collectAsStateWithLifecycle(initialValue = null)
     val audioMode by preferences.audioMode.collectAsStateWithLifecycle(
         initialValue = AudioMode.DeviceAndMic,
@@ -131,11 +140,13 @@ fun CaptureScreen(
         )
     }
 
-    DisposableEffect(lifecycleOwner, context) {
+    DisposableEffect(lifecycleOwner, context, powerManager) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 enhancedCallCompatibilityEnabled =
                     CallCaptureCompatibility.isAccessibilityAssistEnabled(context)
+                batteryOptimizationRestricted =
+                    !powerManager.isIgnoringBatteryOptimizations(context.packageName)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -330,6 +341,12 @@ fun CaptureScreen(
                             thermalLevel = guardianStatus.thermalLevel,
                             audioHealth = guardianStatus.audioHealth,
                             voipStatus = guardianStatus.voipStatus,
+                            microphoneMutedBySystem =
+                                guardianStatus.microphoneMutedBySystem,
+                            screenInteractive = guardianStatus.screenInteractive,
+                            cpuProtectionActive = guardianStatus.cpuProtectionActive,
+                            batteryOptimizationRestricted =
+                                guardianStatus.batteryOptimizationRestricted,
                             warning = guardianStatus.storageWarning ||
                                 guardianStatus.workingStorageWarning ||
                                 guardianStatus.thermalWarning ||
@@ -338,7 +355,13 @@ fun CaptureScreen(
                                         guardianStatus.audioHealth != AudioCaptureHealth.NotRequested
                                     ) ||
                                 guardianStatus.voipStatus == VoipCaptureStatus.SilencedBySystem ||
-                                guardianStatus.voipStatus == VoipCaptureStatus.NoMicrophonePath,
+                                guardianStatus.voipStatus == VoipCaptureStatus.NoMicrophonePath ||
+                                guardianStatus.microphoneMutedBySystem ||
+                                !guardianStatus.screenInteractive ||
+                                (
+                                    state is RecordingState.Recording &&
+                                        !guardianStatus.cpuProtectionActive
+                                    ),
                         )
                     }
                 }
@@ -394,6 +417,31 @@ fun CaptureScreen(
                             )
                         },
                     )
+                }
+
+                item {
+                    CaptureOptionCard(
+                        icon = Icons.Default.AllInclusive,
+                        title = stringResource(R.string.recording_protection_title),
+                        value = stringResource(
+                            if (batteryOptimizationRestricted) {
+                                R.string.recording_protection_restricted
+                            } else {
+                                R.string.recording_protection_unrestricted
+                            },
+                        ),
+                    ) {
+                        OutlinedButton(
+                            enabled = !active && !busy,
+                            onClick = {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+                                )
+                            },
+                        ) {
+                            Text(stringResource(R.string.recording_protection_manage))
+                        }
+                    }
                 }
 
                 item {
@@ -519,6 +567,10 @@ private fun RecordingGuardianCard(
     thermalLevel: GuardianThermalLevel,
     audioHealth: AudioCaptureHealth,
     voipStatus: VoipCaptureStatus,
+    microphoneMutedBySystem: Boolean,
+    screenInteractive: Boolean,
+    cpuProtectionActive: Boolean,
+    batteryOptimizationRestricted: Boolean,
     warning: Boolean,
 ) {
     Card(
@@ -622,6 +674,46 @@ private fun RecordingGuardianCard(
                                 stringResource(R.string.guardian_voip_inactive)
                         },
                     ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Text(
+                text = stringResource(
+                    R.string.guardian_cpu_line,
+                    stringResource(
+                        if (cpuProtectionActive) {
+                            R.string.guardian_cpu_active
+                        } else {
+                            R.string.guardian_cpu_inactive
+                        },
+                    ),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(
+                    R.string.guardian_battery_line,
+                    stringResource(
+                        if (batteryOptimizationRestricted) {
+                            R.string.guardian_battery_restricted
+                        } else {
+                            R.string.guardian_battery_unrestricted
+                        },
+                    ),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (microphoneMutedBySystem) {
+                Text(
+                    text = stringResource(R.string.guardian_microphone_muted),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            if (!screenInteractive) {
+                Text(
+                    text = stringResource(R.string.guardian_screen_off),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                 )

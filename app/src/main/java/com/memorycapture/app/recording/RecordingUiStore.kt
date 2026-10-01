@@ -117,6 +117,10 @@ data class RecordingGuardianStatus(
     val storageWarning: Boolean = false,
     val workingStorageWarning: Boolean = false,
     val thermalWarning: Boolean = false,
+    val microphoneMutedBySystem: Boolean = false,
+    val screenInteractive: Boolean = true,
+    val cpuProtectionActive: Boolean = false,
+    val batteryOptimizationRestricted: Boolean = false,
 )
 
 object RecordingGuardianStore {

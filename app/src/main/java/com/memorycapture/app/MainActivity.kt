@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
@@ -195,7 +196,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun launchProjectionPermission() {
         RecordingStateStore.transition(RecordingState.PermissionRequired)
-        projectionPermissionLauncher.launch(projectionManager.createScreenCaptureIntent())
+
+        val captureIntent =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                projectionManager.createScreenCaptureIntent(
+                    MediaProjectionConfig.createConfigForDefaultDisplay(),
+                )
+            } else {
+                projectionManager.createScreenCaptureIntent()
+            }
+
+        projectionPermissionLauncher.launch(captureIntent)
     }
 
     private suspend fun startRecordingService(resultCode: Int, resultData: Intent) {
