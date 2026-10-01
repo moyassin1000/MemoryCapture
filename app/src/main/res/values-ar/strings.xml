@@ -292,5 +292,17 @@
     <string name="guardian_voip_no_mic_path">تم اكتشاف مكالمة لكن وضع التسجيل الحالي لا يستخدم الميكروفون. اختر الميكروفون أو الجهاز + الميكروفون لتجربة التقاط صوت المكالمة.</string>
     <string name="guardian_warning">يوجد خطر على استمرار التسجيل. سيحاول MemoryCapture الحفظ بأمان قبل الوصول لمرحلة الخطر.</string>
     <string name="guardian_unknown">غير متاح</string>
+    <string name="recording_protection_title">حماية التسجيل</string>
+    <string name="recording_protection_restricted">البطارية مُحسّنة بواسطة النظام</string>
+    <string name="recording_protection_unrestricted">غير مقيّد</string>
+    <string name="recording_protection_manage">إعدادات البطارية</string>
+    <string name="guardian_cpu_line">حماية المعالج: %1$s</string>
+    <string name="guardian_cpu_active">مفعلة</string>
+    <string name="guardian_cpu_inactive">غير مفعلة</string>
+    <string name="guardian_battery_line">تحسين البطارية: %1$s</string>
+    <string name="guardian_battery_restricted">تحت إدارة النظام</string>
+    <string name="guardian_battery_unrestricted">غير مقيّد</string>
+    <string name="guardian_microphone_muted">كتم الميكروفون من النظام مفعّل. قد يكون التسجيل الصوتي صامتًا حتى يتم إلغاء الكتم.</string>
+    <string name="guardian_screen_off">الشاشة مطفأة أو غير تفاعلية. قد تتوقف إطارات الشاشة أو تصبح سوداء حتى تعمل الشاشة مرة أخرى.</string>
 
 </resources>
