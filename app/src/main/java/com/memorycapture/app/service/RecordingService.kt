@@ -51,6 +51,9 @@ class RecordingService : Service() {
     private var recoveryCheckpointInFlight = false
     private var storageGuardianEnabled = true
     private var guardianStopInProgress = false
+    @Volatile
+    private var finalizationInFlight = false
+    @Volatile
     private var intentionalStop = false
 
     override fun onCreate() {
@@ -241,7 +244,12 @@ class RecordingService : Service() {
 
     private fun stopProjectionSession() {
         val state = RecordingStateStore.state.value
-        if (state !is RecordingState.Recording && state !is RecordingState.Paused) return
+        if (
+            finalizationInFlight ||
+            (state !is RecordingState.Recording && state !is RecordingState.Paused)
+        ) {
+            return
+        }
 
         RecordingStateStore.transition(RecordingState.Stopping)
         RecordingStateStore.transition(RecordingState.Processing)
@@ -249,88 +257,123 @@ class RecordingService : Service() {
         recoveryCheckpointEnabled = false
         cancelRecoveryCheckpoint()
         cancelGuardian()
-        val highlights = RecordingSessionStore.snapshotHighlights()
-        val saved = recorderEngine.stopAndSave()
+        floatingControls?.hide()
         intentionalStop = true
-        projectionController.stop()
+        finalizationInFlight = true
 
-        if (saved != null) {
-            publishSavedRecording(saved)
-            highlightRepository.save(
-                recordingUri = saved.uri?.toString(),
-                displayName = saved.displayName,
-                highlightsMillis = highlights,
-            )
-            recoveryManager.markSessionClosed()
-            RecordingStateStore.transition(RecordingState.Completed)
-        } else {
-            val recovered = recoveryManager.recoverIfNeeded()
-            if (recovered != null) {
-                SavedRecordingStore.setSaved(
-                    displayName = recovered.displayName,
-                    location = recovered.locationLabel,
-                )
-                RecordingStateStore.transition(RecordingState.Completed)
+        val highlights = RecordingSessionStore.snapshotHighlights()
+
+        thread(
+            start = true,
+            name = "MemoryCapture-FinalizeRecording",
+        ) {
+            val saved = recorderEngine.stopAndSave()
+            val recovered = if (saved == null) {
+                recoveryManager.recoverIfNeeded()
             } else {
-                RecordingStateStore.forceError(RecordingError.MuxerFailure)
+                null
+            }
+
+            recoveryHandler.post {
+                projectionController.stop()
+
+                when {
+                    saved != null -> {
+                        publishSavedRecording(saved)
+                        highlightRepository.save(
+                            recordingUri = saved.uri?.toString(),
+                            displayName = saved.displayName,
+                            highlightsMillis = highlights,
+                        )
+                        recoveryManager.markSessionClosed()
+                        RecordingStateStore.transition(RecordingState.Completed)
+                    }
+
+                    recovered != null -> {
+                        SavedRecordingStore.setSaved(
+                            displayName = recovered.displayName,
+                            location = recovered.locationLabel,
+                        )
+                        RecordingStateStore.transition(RecordingState.Completed)
+                    }
+
+                    else -> {
+                        RecordingStateStore.forceError(RecordingError.MuxerFailure)
+                    }
+                }
+
+                finalizationInFlight = false
+                RecordingSessionStore.clear()
+                stopForegroundAndSelf()
             }
         }
-
-        RecordingSessionStore.clear()
-        floatingControls?.hide()
-        stopForegroundAndSelf()
     }
 
     private fun handleProjectionStopped() {
-        if (intentionalStop) return
+        if (intentionalStop || finalizationInFlight) return
 
         val current = RecordingStateStore.state.value
-        var completedSafely = false
-
-        if (current is RecordingState.Recording || current is RecordingState.Paused) {
-            RecordingStateStore.transition(RecordingState.Stopping)
-            RecordingStateStore.transition(RecordingState.Processing)
-
-            recoveryCheckpointEnabled = false
-            cancelRecoveryCheckpoint()
-            cancelGuardian()
-            val highlights = RecordingSessionStore.snapshotHighlights()
-            val saved = recorderEngine.stopAndSave()
-            if (saved != null) {
-                publishSavedRecording(saved)
-                highlightRepository.save(
-                    recordingUri = saved.uri?.toString(),
-                    displayName = saved.displayName,
-                    highlightsMillis = highlights,
-                )
-                recoveryManager.markSessionClosed()
-                RecordingStateStore.transition(RecordingState.Completed)
-                completedSafely = true
-            } else {
-                val recovered = recoveryManager.recoverIfNeeded()
-                if (recovered != null) {
-                    SavedRecordingStore.setSaved(
-                        displayName = recovered.displayName,
-                        location = recovered.locationLabel,
-                    )
-                    RecordingStateStore.transition(RecordingState.Completed)
-                    completedSafely = true
-                } else {
-                    RecordingStateStore.forceError(RecordingError.RecordingInterrupted)
-                }
-            }
+        if (current !is RecordingState.Recording && current !is RecordingState.Paused) {
+            return
         }
+
+        RecordingStateStore.transition(RecordingState.Stopping)
+        RecordingStateStore.transition(RecordingState.Processing)
 
         recoveryCheckpointEnabled = false
         cancelRecoveryCheckpoint()
         cancelGuardian()
-        if (!completedSafely) {
-            recoveryManager.clearInterruptedFlag()
-        }
-        RecordingSessionStore.clear()
-        intentionalStop = true
         floatingControls?.hide()
-        stopForegroundAndSelf()
+        intentionalStop = true
+        finalizationInFlight = true
+
+        val highlights = RecordingSessionStore.snapshotHighlights()
+
+        thread(
+            start = true,
+            name = "MemoryCapture-FinalizeInterrupted",
+        ) {
+            val saved = recorderEngine.stopAndSave()
+            val recovered = if (saved == null) {
+                recoveryManager.recoverIfNeeded()
+            } else {
+                null
+            }
+
+            recoveryHandler.post {
+                when {
+                    saved != null -> {
+                        publishSavedRecording(saved)
+                        highlightRepository.save(
+                            recordingUri = saved.uri?.toString(),
+                            displayName = saved.displayName,
+                            highlightsMillis = highlights,
+                        )
+                        recoveryManager.markSessionClosed()
+                        RecordingStateStore.transition(RecordingState.Completed)
+                    }
+
+                    recovered != null -> {
+                        SavedRecordingStore.setSaved(
+                            displayName = recovered.displayName,
+                            location = recovered.locationLabel,
+                        )
+                        RecordingStateStore.transition(RecordingState.Completed)
+                    }
+
+                    else -> {
+                        recoveryManager.clearInterruptedFlag()
+                        RecordingStateStore.forceError(
+                            RecordingError.RecordingInterrupted,
+                        )
+                    }
+                }
+
+                finalizationInFlight = false
+                RecordingSessionStore.clear()
+                stopForegroundAndSelf()
+            }
+        }
     }
 
     private fun publishSavedRecording(saved: SavedRecording) {
@@ -622,20 +665,13 @@ class RecordingService : Service() {
         cancelGuardian()
         RecordingGuardianStore.clear()
         floatingControls?.hide()
-        if (recorderEngine.isActive()) {
-            val highlights = RecordingSessionStore.snapshotHighlights()
-            val saved = recorderEngine.stopAndSave()
-            if (saved != null) {
-                publishSavedRecording(saved)
-                highlightRepository.save(
-                    recordingUri = saved.uri?.toString(),
-                    displayName = saved.displayName,
-                    highlightsMillis = highlights,
-                )
-            }
+
+        if (recorderEngine.isActive() && !finalizationInFlight) {
+            intentionalStop = true
+            recorderEngine.abort()
         }
+
         RecordingSessionStore.clear()
-        intentionalStop = true
         projectionController.stop()
         super.onDestroy()
     }
