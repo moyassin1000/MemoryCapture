@@ -489,7 +489,8 @@ class AudioCaptureEngine(
                     microphoneRequested &&
                     voipAssistEnabled &&
                     !micAvailable &&
-                    bytes > 0
+                    bytes > 0 &&
+                    (communicationActive || !playbackAvailable)
                 ) {
                     Thread.sleep(SYNTHETIC_SILENCE_PACE_MS)
                 } else if (bytes == 0 && (micAvailable || playbackAvailable)) {
