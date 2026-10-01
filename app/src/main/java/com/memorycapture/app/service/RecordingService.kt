@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -63,7 +64,9 @@ class RecordingService : Service() {
     @Volatile
     private var recoveryCheckpointInFlight = false
     private var recordingTreeUri: String? = null
-    private var lastVoipStatus = VoipCaptureStatus.Inactive
+    private var lastCallActive = false
+    @Volatile
+    private var postCallVideoRecoveryExhausted = false
     @Volatile
     private var lastMaintenanceElapsedMs = 0L
     private var guardianStopInProgress = false
@@ -227,7 +230,8 @@ class RecordingService : Service() {
             recoveryCheckpointEnabled = true
             guardianStopInProgress = false
             longSessionWatchdog.reset()
-            lastVoipStatus = VoipCaptureStatus.Inactive
+            lastCallActive = false
+            postCallVideoRecoveryExhausted = false
             callVideoRecoveryPolicy.reset()
             lastMaintenanceElapsedMs = SystemClock.elapsedRealtime()
             scheduleRecoveryCheckpoint()
@@ -519,7 +523,7 @@ class RecordingService : Service() {
 
             val thermalLevel = currentThermalLevel()
             val audioHealth = recorderEngine.audioHealth()
-            val voipStatus = recorderEngine.refreshVoipCaptureStatus()
+            val voipStatus = recorderEngine.currentVoipCaptureStatus()
             val destinationWarning =
                 destinationAvailableBytes?.let { available ->
                     available <= STORAGE_WARNING_BYTES ||
@@ -572,17 +576,11 @@ class RecordingService : Service() {
 
             val thermalDanger = currentThermalStatusRaw() >= THERMAL_EMERGENCY_STATUS
             val nowElapsedMs = SystemClock.elapsedRealtime()
-            val callActive =
-                recorderEngine.currentVoipCaptureStatus() != VoipCaptureStatus.Inactive
-            val videoStalled = recorderEngine.isVideoDrainStalled(
-                nowElapsedMs = nowElapsedMs,
-                thresholdMs = VIDEO_DRAIN_STALL_THRESHOLD_MS,
-            )
 
             val watchdogDecision = longSessionWatchdog.evaluate(
                 LongSessionWatchdogInput(
                     fatalRuntimeFailure = recorderEngine.hasFatalRuntimeFailure(),
-                    videoDrainStalled = !callActive && videoStalled,
+                    videoDrainStalled = postCallVideoRecoveryExhausted,
                     audioCaptureStalled = recorderEngine.isAudioCaptureStalled(
                         nowElapsedMs = nowElapsedMs,
                         thresholdMs = AUDIO_STALL_THRESHOLD_MS,
@@ -624,11 +622,18 @@ class RecordingService : Service() {
                 return
             }
 
-            val voipStatus = recorderEngine.refreshVoipCaptureStatus()
-            val callActive = voipStatus != VoipCaptureStatus.Inactive
-            val callJustEnded =
-                lastVoipStatus != VoipCaptureStatus.Inactive &&
-                    voipStatus == VoipCaptureStatus.Inactive
+            val callActive = isCommunicationCallActive()
+            val paused = RecordingStateStore.state.value is RecordingState.Paused
+
+            if (paused) {
+                lastCallActive = callActive
+                postCallVideoRecoveryExhausted = false
+                callVideoRecoveryPolicy.reset()
+                callMonitorHandler.postDelayed(this, CALL_MONITOR_INTERVAL_MS)
+                return
+            }
+
+            val callJustEnded = lastCallActive && !callActive
             val nowElapsedMs = SystemClock.elapsedRealtime()
             val frameAgeMs = recorderEngine.videoFrameAgeMs(nowElapsedMs)
 
@@ -646,7 +651,13 @@ class RecordingService : Service() {
                 }
             }
 
-            lastVoipStatus = voipStatus
+            postCallVideoRecoveryExhausted =
+                callVideoRecoveryPolicy.hasExhaustedPostCallRecovery(
+                    callActive = callActive,
+                    frameAgeMs = frameAgeMs,
+                )
+
+            lastCallActive = callActive
             callMonitorHandler.postDelayed(this, CALL_MONITOR_INTERVAL_MS)
         }
     }
@@ -658,8 +669,15 @@ class RecordingService : Service() {
 
     private fun cancelCallMonitor() {
         callMonitorHandler.removeCallbacks(callMonitorRunnable)
-        lastVoipStatus = VoipCaptureStatus.Inactive
+        lastCallActive = false
+        postCallVideoRecoveryExhausted = false
         callVideoRecoveryPolicy.reset()
+    }
+
+    private fun isCommunicationCallActive(): Boolean {
+        val audioManager = getSystemService(AudioManager::class.java)
+        return audioManager.mode == AudioManager.MODE_IN_CALL ||
+            audioManager.mode == AudioManager.MODE_IN_COMMUNICATION
     }
 
     private fun scheduleGuardian() {
@@ -869,7 +887,6 @@ class RecordingService : Service() {
         private const val RECOVERY_WINDOW_SECONDS = 60
         private const val GUARDIAN_INTERVAL_MS = 5_000L
         private const val CALL_MONITOR_INTERVAL_MS = 500L
-        private const val VIDEO_DRAIN_STALL_THRESHOLD_MS = 8_000L
         private const val AUDIO_STALL_THRESHOLD_MS = 15_000L
         private const val MAINTENANCE_INTERVAL_MS = 60_000L
         private const val STORAGE_WARNING_BYTES = 500L * 1024L * 1024L
