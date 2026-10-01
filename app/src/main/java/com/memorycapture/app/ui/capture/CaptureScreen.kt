@@ -37,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -72,6 +73,7 @@ import com.memorycapture.app.recording.RecordingGuardianStore
 import com.memorycapture.app.recording.RecordingSessionStore
 import com.memorycapture.app.recording.RecordingState
 import com.memorycapture.app.recording.RecordingStateStore
+import com.memorycapture.app.recording.VoipCaptureStatus
 import com.memorycapture.app.ui.components.CountdownDialog
 import com.memorycapture.app.ui.components.PremiumBackground
 import com.memorycapture.app.ui.components.PrimaryRecordingButton
@@ -96,6 +98,8 @@ fun CaptureScreen(
     val microphoneDeviceId by preferences.microphoneDeviceId.collectAsStateWithLifecycle(
         initialValue = -1,
     )
+    val voipCaptureAssistEnabled by preferences.voipCaptureAssistEnabled
+        .collectAsStateWithLifecycle(initialValue = true)
     val recordingQuality by preferences.recordingQuality.collectAsStateWithLifecycle(
         initialValue = RecordingQuality.P1080,
     )
@@ -302,6 +306,7 @@ fun CaptureScreen(
                                 guardianStatus.destinationSpaceKnown,
                             thermalLevel = guardianStatus.thermalLevel,
                             audioHealth = guardianStatus.audioHealth,
+                            voipStatus = guardianStatus.voipStatus,
                             warning = guardianStatus.storageWarning ||
                                 guardianStatus.workingStorageWarning ||
                                 guardianStatus.thermalWarning ||
@@ -337,6 +342,18 @@ fun CaptureScreen(
                         onMicrophoneSelect = { deviceId ->
                             scope.launch {
                                 preferences.setMicrophoneDeviceId(deviceId)
+                            }
+                        },
+                    )
+                }
+
+                item {
+                    VoipAssistCard(
+                        enabled = voipCaptureAssistEnabled,
+                        controlsEnabled = !active && !busy,
+                        onEnabledChange = { enabled ->
+                            scope.launch {
+                                preferences.setVoipCaptureAssistEnabled(enabled)
                             }
                         },
                     )
@@ -464,6 +481,7 @@ private fun RecordingGuardianCard(
     destinationSpaceKnown: Boolean,
     thermalLevel: GuardianThermalLevel,
     audioHealth: AudioCaptureHealth,
+    voipStatus: VoipCaptureStatus,
     warning: Boolean,
 ) {
     Card(
@@ -550,6 +568,27 @@ private fun RecordingGuardianCard(
                     fontWeight = FontWeight.Bold,
                 )
             }
+            if (voipStatus != VoipCaptureStatus.Inactive) {
+                Text(
+                    text = stringResource(
+                        R.string.guardian_voip_line,
+                        when (voipStatus) {
+                            VoipCaptureStatus.CallDetected ->
+                                stringResource(R.string.guardian_voip_call_detected)
+                            VoipCaptureStatus.SpeakerAssistActive ->
+                                stringResource(R.string.guardian_voip_speaker_assist)
+                            VoipCaptureStatus.SilencedBySystem ->
+                                stringResource(R.string.guardian_voip_silenced)
+                            VoipCaptureStatus.NoMicrophonePath ->
+                                stringResource(R.string.guardian_voip_no_mic_path)
+                            VoipCaptureStatus.Inactive ->
+                                stringResource(R.string.guardian_voip_inactive)
+                        },
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             if (warning) {
                 Text(
                     text = stringResource(R.string.guardian_warning),
@@ -581,6 +620,53 @@ private fun formatGuardianRemaining(seconds: Long): String {
         "${hours}h ${minutes}m"
     } else {
         "${minutes}m"
+    }
+}
+
+@Composable
+private fun VoipAssistCard(
+    enabled: Boolean,
+    controlsEnabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(10.dp, MaterialTheme.shapes.large),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Speaker,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.voip_assist_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                )
+                Text(
+                    text = stringResource(R.string.voip_assist_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = enabled,
+                enabled = controlsEnabled,
+                onCheckedChange = onEnabledChange,
+            )
+        }
     }
 }
 
