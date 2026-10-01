@@ -656,7 +656,8 @@ class ScreenRecorderEngine(
             directory.listFiles()?.forEach { file ->
                 if (
                     file.isFile &&
-                    file.lastModified() in 1 until cutoff
+                    file.lastModified() > 0L &&
+                file.lastModified() < cutoff
                 ) {
                     runCatching { file.delete() }
                 }
