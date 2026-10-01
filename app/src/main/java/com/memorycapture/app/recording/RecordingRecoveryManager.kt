@@ -31,6 +31,12 @@ class RecordingRecoveryManager(
     val checkpointFile: File
         get() = File(recoveryDirectory, CHECKPOINT_NAME)
 
+    val checkpointTempFile: File
+        get() = File(recoveryDirectory, CHECKPOINT_TEMP_NAME)
+
+    private val checkpointBackupFile: File
+        get() = File(recoveryDirectory, CHECKPOINT_BACKUP_NAME)
+
     fun markSessionActive() {
         preferences.edit()
             .putBoolean(KEY_SESSION_ACTIVE, true)
@@ -44,6 +50,39 @@ class RecordingRecoveryManager(
             .remove(KEY_SESSION_STARTED_AT)
             .apply()
         runCatching { checkpointFile.delete() }
+        runCatching { checkpointTempFile.delete() }
+        runCatching { checkpointBackupFile.delete() }
+    }
+
+    fun commitCheckpoint(): Boolean {
+        val temp = checkpointTempFile
+        if (!temp.exists() || temp.length() <= MIN_RECOVERY_BYTES) {
+            runCatching { temp.delete() }
+            return false
+        }
+
+        val current = checkpointFile
+        val backup = checkpointBackupFile
+        runCatching { backup.delete() }
+
+        if (current.exists()) {
+            if (!current.renameTo(backup)) {
+                runCatching { temp.delete() }
+                return false
+            }
+        }
+
+        val committed = temp.renameTo(current)
+        if (!committed) {
+            if (backup.exists()) {
+                runCatching { backup.renameTo(current) }
+            }
+            runCatching { temp.delete() }
+            return false
+        }
+
+        runCatching { backup.delete() }
+        return true
     }
 
     fun hasInterruptedSession(): Boolean =
@@ -61,13 +100,27 @@ class RecordingRecoveryManager(
 
         clearInterruptedFlag()
 
-        val file = checkpointFile
-        if (!file.exists() || file.length() <= MIN_RECOVERY_BYTES) {
-            runCatching { file.delete() }
+        val file = when {
+            checkpointFile.exists() && checkpointFile.length() > MIN_RECOVERY_BYTES ->
+                checkpointFile
+            checkpointBackupFile.exists() &&
+                checkpointBackupFile.length() > MIN_RECOVERY_BYTES ->
+                checkpointBackupFile
+            else -> null
+        } ?: run {
+            runCatching { checkpointFile.delete() }
+            runCatching { checkpointTempFile.delete() }
+            runCatching { checkpointBackupFile.delete() }
             return null
         }
 
-        return importRecoveredFile(file)
+        val recovered = importRecoveredFile(file)
+        if (recovered != null) {
+            runCatching { checkpointFile.delete() }
+            runCatching { checkpointTempFile.delete() }
+            runCatching { checkpointBackupFile.delete() }
+        }
+        return recovered
     }
 
     private fun importRecoveredFile(file: File): RecoveredRecording? {
@@ -148,6 +201,8 @@ class RecordingRecoveryManager(
         private const val KEY_SESSION_ACTIVE = "session_active"
         private const val KEY_SESSION_STARTED_AT = "session_started_at"
         private const val CHECKPOINT_NAME = "last_recovery_checkpoint.mp4"
+        private const val CHECKPOINT_TEMP_NAME = "last_recovery_checkpoint.tmp.mp4"
+        private const val CHECKPOINT_BACKUP_NAME = "last_recovery_checkpoint.bak.mp4"
         private const val MIN_RECOVERY_BYTES = 16 * 1024L
     }
 }
