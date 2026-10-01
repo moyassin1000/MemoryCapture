@@ -446,21 +446,36 @@ class AudioCaptureEngine(
 
                 lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
 
+                val effectiveMicBytes =
+                    if (
+                        communicationActive &&
+                        microphoneRequested &&
+                        voipAssistEnabled &&
+                        micBytes <= 0
+                    ) {
+                        val silenceBytes =
+                            minOf(SYNTHETIC_SILENCE_BYTES, micBuffer.size).and(-2)
+                        micBuffer.fill(0, 0, silenceBytes)
+                        silenceBytes
+                    } else {
+                        micBytes
+                    }
+
                 val bytes = when (mode) {
                     AudioMode.None -> 0
-                    AudioMode.Microphone -> micBytes
+                    AudioMode.Microphone -> effectiveMicBytes
                     AudioMode.DeviceAudio -> playbackBytes
                     AudioMode.DeviceAndMic -> {
                         if (communicationActive) {
                             copyPcm16(
                                 source = micBuffer,
-                                byteCount = micBytes,
+                                byteCount = effectiveMicBytes,
                                 out = mixedBuffer,
                             )
                         } else {
                             mixPcm16(
                                 micBuffer = micBuffer,
-                                micBytes = micBytes,
+                                micBytes = effectiveMicBytes,
                                 playbackBuffer = playbackBuffer,
                                 playbackBytes = playbackBytes,
                                 out = mixedBuffer,
@@ -486,11 +501,11 @@ class AudioCaptureEngine(
                 )
 
                 if (
+                    communicationActive &&
                     microphoneRequested &&
                     voipAssistEnabled &&
-                    !micAvailable &&
-                    bytes > 0 &&
-                    (communicationActive || !playbackAvailable)
+                    micBytes <= 0 &&
+                    bytes > 0
                 ) {
                     Thread.sleep(SYNTHETIC_SILENCE_PACE_MS)
                 } else if (bytes == 0 && (micAvailable || playbackAvailable)) {
@@ -648,8 +663,8 @@ class AudioCaptureEngine(
         record.read(
             target,
             0,
-            target.size,
-            AudioRecord.READ_BLOCKING,
+            minOf(target.size, PCM_READ_CHUNK_BYTES),
+            AudioRecord.READ_NON_BLOCKING,
         )
 
     private fun updateRuntimeHealth(
@@ -1010,9 +1025,11 @@ class AudioCaptureEngine(
         private const val AUDIO_IDLE_BACKOFF_MS = 5L
         private const val CALL_MIC_PROBE_INTERVAL_MS = 1_000L
         private const val CALL_MIC_RECOVERY_INTERVAL_MS = 1_000L
-        private const val SYNTHETIC_SILENCE_PACE_MS = 20L
+        private const val AUDIO_FRAME_MS = 20L
+        private const val SYNTHETIC_SILENCE_PACE_MS = AUDIO_FRAME_MS
         private const val SYNTHETIC_SILENCE_BYTES =
             SAMPLE_RATE * BYTES_PER_FRAME / 50
+        private const val PCM_READ_CHUNK_BYTES = SYNTHETIC_SILENCE_BYTES
         private val CALL_MIC_AUDIO_SOURCES = intArrayOf(
             MediaRecorder.AudioSource.MIC,
             MediaRecorder.AudioSource.VOICE_RECOGNITION,
