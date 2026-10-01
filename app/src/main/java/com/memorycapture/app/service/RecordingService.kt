@@ -340,7 +340,7 @@ class RecordingService : Service() {
         )
     }
 
-    private val recoveryRunnable = object : Runnable {
+    private val recoveryRunnable: Runnable = object : Runnable {
         override fun run() {
             if (
                 !recoveryCheckpointEnabled ||
