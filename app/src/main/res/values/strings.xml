@@ -261,5 +261,14 @@
     <string name="highlights">Highlights</string>
     <string name="highlights_count">%1$d saved highlights</string>
     <string name="highlight_number_time">Highlight %1$d • %2$s</string>
+    <string name="recording_guardian">Recording Guardian</string>
+    <string name="guardian_storage_line">Storage: %1$s • Estimated remaining: %2$s</string>
+    <string name="guardian_thermal_line">Thermal: %1$s</string>
+    <string name="guardian_thermal_normal">Normal</string>
+    <string name="guardian_thermal_warm">Warm</string>
+    <string name="guardian_thermal_hot">Hot</string>
+    <string name="guardian_thermal_critical">Critical</string>
+    <string name="guardian_warning">Recording stability is at risk. MemoryCapture will try to save safely before conditions become unsafe.</string>
+    <string name="guardian_unknown">Unavailable</string>
 
 </resources>
