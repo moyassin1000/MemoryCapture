@@ -93,15 +93,26 @@ class MainActivity : AppCompatActivity() {
         runCatching { ProBillingManager.initialize(applicationContext) }
 
         lifecycleScope.launch {
-            val recovered = withContext(Dispatchers.IO) {
-                recoveryManager.recoverIfNeeded()
+            val shouldAttemptRecovery = when (RecordingStateStore.state.value) {
+                RecordingState.Idle,
+                RecordingState.Completed,
+                is RecordingState.Error,
+                -> true
+
+                else -> false
             }
-            if (recovered != null) {
-                SavedRecordingStore.setSaved(
-                    displayName = recovered.displayName,
-                    location = recovered.locationLabel,
-                )
-                RecordingStateStore.transition(RecordingState.Completed)
+
+            if (shouldAttemptRecovery) {
+                val recovered = withContext(Dispatchers.IO) {
+                    recoveryManager.recoverIfNeeded()
+                }
+                if (recovered != null) {
+                    SavedRecordingStore.setSaved(
+                        displayName = recovered.displayName,
+                        location = recovered.locationLabel,
+                    )
+                    RecordingStateStore.transition(RecordingState.Completed)
+                }
             }
         }
 
