@@ -131,94 +131,114 @@ class AudioCaptureEngine(
         check(minBuffer > 0) { "Unable to determine audio buffer size." }
         val bufferSize = max(minBuffer * 2, PCM_BUFFER_BYTES)
 
-        val localMic = if (
-            mode == AudioMode.Microphone || mode == AudioMode.DeviceAndMic
-        ) {
-            createMicrophoneRecord(
-                format = format,
-                bufferSize = bufferSize,
-                preferredMicDeviceId = preferredMicDeviceId,
-                audioSource = MediaRecorder.AudioSource.MIC,
-            )
-        } else {
-            null
-        }
+        var localMic: AudioRecord? = null
+        var localPlayback: AudioRecord? = null
+        var localEncoder: MediaCodec? = null
 
-        val localPlayback = if (
-            mode == AudioMode.DeviceAudio || mode == AudioMode.DeviceAndMic
-        ) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                createPlaybackRecord(
-                    projection = projection,
+        try {
+            localMic = if (
+                mode == AudioMode.Microphone || mode == AudioMode.DeviceAndMic
+            ) {
+                createMicrophoneRecord(
                     format = format,
                     bufferSize = bufferSize,
+                    preferredMicDeviceId = preferredMicDeviceId,
+                    audioSource = MediaRecorder.AudioSource.MIC,
                 )
             } else {
-                error("Internal device audio capture requires Android 10 or newer.")
+                null
             }
-        } else {
-            null
-        }
 
-        val audioFormat = MediaFormat.createAudioFormat(
-            AUDIO_MIME,
-            SAMPLE_RATE,
-            CHANNEL_COUNT,
-        ).apply {
-            setInteger(
-                MediaFormat.KEY_AAC_PROFILE,
-                MediaCodecInfo.CodecProfileLevel.AACObjectLC,
-            )
-            setInteger(MediaFormat.KEY_BIT_RATE, AUDIO_BIT_RATE)
-            setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, bufferSize)
-        }
+            localPlayback = if (
+                mode == AudioMode.DeviceAudio || mode == AudioMode.DeviceAndMic
+            ) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    createPlaybackRecord(
+                        projection = projection,
+                        format = format,
+                        bufferSize = bufferSize,
+                    )
+                } else {
+                    error("Internal device audio capture requires Android 10 or newer.")
+                }
+            } else {
+                null
+            }
 
-        val localEncoder = MediaCodec.createEncoderByType(AUDIO_MIME).apply {
-            configure(
-                audioFormat,
-                null,
-                null,
-                MediaCodec.CONFIGURE_FLAG_ENCODE,
-            )
-            start()
-        }
+            val audioFormat = MediaFormat.createAudioFormat(
+                AUDIO_MIME,
+                SAMPLE_RATE,
+                CHANNEL_COUNT,
+            ).apply {
+                setInteger(
+                    MediaFormat.KEY_AAC_PROFILE,
+                    MediaCodecInfo.CodecProfileLevel.AACObjectLC,
+                )
+                setInteger(MediaFormat.KEY_BIT_RATE, AUDIO_BIT_RATE)
+                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, bufferSize)
+            }
 
-        microphoneRecord = localMic
-        playbackRecord = localPlayback
-        encoder = localEncoder
-        submittedFrames = 0L
-        failure = null
-        runtimeHealth = AudioCaptureHealth.Healthy
-        voipStatus = VoipCaptureStatus.Inactive
-        voipAssistEnabled = voipCaptureAssistEnabled
-        callMicSilencedBySystem = false
-        activeMicSource = MediaRecorder.AudioSource.MIC
-        accessibilityAssistEnabled =
-            CallCaptureCompatibility.isAccessibilityAssistEnabled(context)
-        lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
-        paused = false
-        running = true
+            localEncoder = MediaCodec.createEncoderByType(AUDIO_MIME).apply {
+                configure(
+                    audioFormat,
+                    null,
+                    null,
+                    MediaCodec.CONFIGURE_FLAG_ENCODE,
+                )
+                start()
+            }
 
-        localMic?.startRecording()
-        localPlayback?.startRecording()
+            localMic?.startRecording()
+            localPlayback?.startRecording()
 
-        worker = thread(
-            start = true,
-            name = "MemoryCapture-AudioEncoder",
-        ) {
-            captureLoop(
-                mode = mode,
-                activeEncoder = localEncoder,
-                initialMic = localMic,
-                playback = localPlayback,
-                audioFormat = format,
-                preferredMicDeviceId = preferredMicDeviceId,
-                bufferSize = bufferSize,
-                sink = sink,
-            )
+            val activeEncoder = requireNotNull(localEncoder)
+            microphoneRecord = localMic
+            playbackRecord = localPlayback
+            encoder = activeEncoder
+            submittedFrames = 0L
+            failure = null
+            runtimeHealth = AudioCaptureHealth.Healthy
+            voipStatus = VoipCaptureStatus.Inactive
+            voipAssistEnabled = voipCaptureAssistEnabled
+            callMicSilencedBySystem = false
+            activeMicSource = MediaRecorder.AudioSource.MIC
+            accessibilityAssistEnabled =
+                CallCaptureCompatibility.isAccessibilityAssistEnabled(context)
+            lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
+            paused = false
+            running = true
+
+            worker = thread(
+                start = true,
+                name = "MemoryCapture-AudioEncoder",
+            ) {
+                captureLoop(
+                    mode = mode,
+                    activeEncoder = activeEncoder,
+                    initialMic = localMic,
+                    playback = localPlayback,
+                    audioFormat = format,
+                    preferredMicDeviceId = preferredMicDeviceId,
+                    bufferSize = bufferSize,
+                    sink = sink,
+                )
+            }
+        } catch (error: Throwable) {
+            running = false
+            paused = false
+            runCatching { localMic?.stop() }
+            runCatching { localPlayback?.stop() }
+            runCatching { localMic?.release() }
+            runCatching { localPlayback?.release() }
+            runCatching { localEncoder?.stop() }
+            runCatching { localEncoder?.release() }
+            microphoneRecord = null
+            playbackRecord = null
+            encoder = null
+            worker = null
+            throw error
         }
     }
-
     fun pause() {
         if (!running || paused) return
         paused = true
