@@ -466,9 +466,6 @@ class ScreenRecorderEngine(
         val activeDisplay = virtualDisplay
         val activeAudio = audioCaptureEngine
         val output = outputHandle
-        val audioTrackWasRegistered = synchronized(muxerLock) {
-            expectedTrackCount == 1 || audioTrackIndex >= 0
-        }
         val activeDrainThread = drainThread
 
         started = false
@@ -488,9 +485,12 @@ class ScreenRecorderEngine(
             if (!signaled) stoppedCleanly = false
 
             activeAudio?.stopAndWait()
+            val audioTrackReady = synchronized(muxerLock) {
+                expectedTrackCount == 1 || audioTrackIndex >= 0
+            }
             if (
                 activeAudio?.failure != null &&
-                !audioTrackWasRegistered
+                !audioTrackReady
             ) {
                 stoppedCleanly = false
             }
