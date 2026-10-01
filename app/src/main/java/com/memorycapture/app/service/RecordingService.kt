@@ -23,6 +23,7 @@ import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.data.recordings.RecordingHighlightRepository
 import com.memorycapture.app.R
 import com.memorycapture.app.projection.MediaProjectionController
+import com.memorycapture.app.recording.CallVideoRecoveryPolicy
 import com.memorycapture.app.recording.GuardianThermalLevel
 import com.memorycapture.app.recording.LongSessionWatchdog
 import com.memorycapture.app.recording.LongSessionWatchdogInput
@@ -55,14 +56,13 @@ class RecordingService : Service() {
     private val replaySaveInFlight = AtomicBoolean(false)
     private val maintenanceInFlight = AtomicBoolean(false)
     private val longSessionWatchdog = LongSessionWatchdog()
+    private val callVideoRecoveryPolicy = CallVideoRecoveryPolicy()
     @Volatile
     private var recoveryCheckpointEnabled = false
     @Volatile
     private var recoveryCheckpointInFlight = false
     private var recordingTreeUri: String? = null
     private var lastVoipStatus = VoipCaptureStatus.Inactive
-    private var videoRebindAttempts = 0
-    private var lastVideoRebindElapsedMs = 0L
     @Volatile
     private var lastMaintenanceElapsedMs = 0L
     private var guardianStopInProgress = false
@@ -227,8 +227,7 @@ class RecordingService : Service() {
             guardianStopInProgress = false
             longSessionWatchdog.reset()
             lastVoipStatus = VoipCaptureStatus.Inactive
-            videoRebindAttempts = 0
-            lastVideoRebindElapsedMs = 0L
+            callVideoRecoveryPolicy.reset()
             lastMaintenanceElapsedMs = SystemClock.elapsedRealtime()
             scheduleRecoveryCheckpoint()
             scheduleGuardian()
@@ -579,35 +578,20 @@ class RecordingService : Service() {
                 thresholdMs = VIDEO_DRAIN_STALL_THRESHOLD_MS,
             )
 
-            if (callJustEnded) {
-                videoRebindAttempts = 0
-                lastVideoRebindElapsedMs = 0L
-            }
-
             val frameAgeMs = recorderEngine.videoFrameAgeMs(nowElapsedMs)
-            val callTimeRebindNeeded =
-                callActive && frameAgeMs >= CALL_VIDEO_REBIND_THRESHOLD_MS
-            val postCallRebindNeeded =
-                !callActive &&
-                    frameAgeMs >= POST_CALL_REBIND_THRESHOLD_MS
-
             if (
-                (callTimeRebindNeeded || postCallRebindNeeded) &&
-                videoRebindAttempts < MAX_VIDEO_REBIND_ATTEMPTS &&
-                nowElapsedMs - lastVideoRebindElapsedMs >=
-                    VIDEO_REBIND_RETRY_INTERVAL_MS
+                callVideoRecoveryPolicy.shouldAttemptRebind(
+                    callActive = callActive,
+                    callJustEnded = callJustEnded,
+                    frameAgeMs = frameAgeMs,
+                    nowElapsedMs = nowElapsedMs,
+                )
             ) {
+                callVideoRecoveryPolicy.recordAttempt(nowElapsedMs)
                 if (recorderEngine.rebindVideoCaptureSurface()) {
-                    videoRebindAttempts += 1
-                    lastVideoRebindElapsedMs = nowElapsedMs
                     longSessionWatchdog.reset()
                     videoStalled = false
                 }
-            }
-
-            if (frameAgeMs < VIDEO_HEALTHY_FRAME_AGE_MS) {
-                videoRebindAttempts = 0
-                lastVideoRebindElapsedMs = 0L
             }
 
             lastVoipStatus = voipStatus
@@ -857,11 +841,6 @@ class RecordingService : Service() {
         private const val RECOVERY_WINDOW_SECONDS = 60
         private const val GUARDIAN_INTERVAL_MS = 5_000L
         private const val VIDEO_DRAIN_STALL_THRESHOLD_MS = 8_000L
-        private const val CALL_VIDEO_REBIND_THRESHOLD_MS = 3_000L
-        private const val POST_CALL_REBIND_THRESHOLD_MS = 2_000L
-        private const val VIDEO_REBIND_RETRY_INTERVAL_MS = 4_000L
-        private const val VIDEO_HEALTHY_FRAME_AGE_MS = 2_000L
-        private const val MAX_VIDEO_REBIND_ATTEMPTS = 3
         private const val AUDIO_STALL_THRESHOLD_MS = 15_000L
         private const val MAINTENANCE_INTERVAL_MS = 60_000L
         private const val STORAGE_WARNING_BYTES = 500L * 1024L * 1024L
