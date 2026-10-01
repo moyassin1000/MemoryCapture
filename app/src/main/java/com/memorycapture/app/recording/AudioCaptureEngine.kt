@@ -976,7 +976,6 @@ class AudioCaptureEngine(
         callMicSilencedBySystem = false
         activeMicSource = MediaRecorder.AudioSource.MIC
         accessibilityAssistEnabled = false
-        previousCommunicationDeviceId = null
         if (runtimeHealth == AudioCaptureHealth.Healthy && failure != null) {
             runtimeHealth = AudioCaptureHealth.AllAudioLost
         }
