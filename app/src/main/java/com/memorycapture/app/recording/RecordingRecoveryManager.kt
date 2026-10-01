@@ -175,7 +175,7 @@ class RecordingRecoveryManager(
     private fun importRecoveredFile(file: File): RecoveredRecording? {
         val displayName =
             "Recovered_" +
-                SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) +
+                SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date()) +
                 ".mp4"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -194,27 +194,37 @@ class RecordingRecoveryManager(
                 values,
             ) ?: return null
 
-            val copied = runCatching {
-                context.contentResolver.openOutputStream(uri, "w")?.use { output ->
-                    file.inputStream().use { input -> input.copyTo(output) }
+            val completed = runCatching {
+                val output = requireNotNull(
+                    context.contentResolver.openOutputStream(uri, "w"),
+                ) {
+                    "Unable to open recovered recording destination."
+                }
+
+                output.use { destination ->
+                    file.inputStream().use { source ->
+                        source.copyTo(destination)
+                    }
+                }
+
+                val updated = context.contentResolver.update(
+                    uri,
+                    ContentValues().apply {
+                        put(MediaStore.Video.Media.IS_PENDING, 0)
+                    },
+                    null,
+                    null,
+                )
+                check(updated > 0) {
+                    "Unable to publish recovered recording."
                 }
                 true
             }.getOrDefault(false)
 
-            if (!copied) {
+            if (!completed) {
                 runCatching { context.contentResolver.delete(uri, null, null) }
                 return null
             }
-
-            context.contentResolver.update(
-                uri,
-                ContentValues().apply {
-                    put(MediaStore.Video.Media.IS_PENDING, 0)
-                },
-                null,
-                null,
-            )
-            runCatching { file.delete() }
 
             return RecoveredRecording(
                 displayName = displayName,
@@ -229,8 +239,7 @@ class RecordingRecoveryManager(
         val target = File(directory, displayName)
 
         return runCatching {
-            file.copyTo(target, overwrite = true)
-            file.delete()
+            file.copyTo(target, overwrite = false)
             MediaScannerConnection.scanFile(
                 context,
                 arrayOf(target.absolutePath),
