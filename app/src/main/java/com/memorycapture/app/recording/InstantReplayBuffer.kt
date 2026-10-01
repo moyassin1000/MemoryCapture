@@ -33,17 +33,20 @@ class InstantReplayBuffer(
     }
 
     private val segments = ArrayDeque<ReplaySegment>()
+    private val pinnedFiles = mutableSetOf<String>()
     private var current: ReplaySegmentWriter? = null
     private var videoFormat: MediaFormat? = null
     private var audioFormat: MediaFormat? = null
     private var latestPtsUs = 0L
     private var sequence = 0
+    private var disposed = false
 
     @Synchronized
     fun registerFormat(
         kind: ReplayTrackKind,
         format: MediaFormat,
     ) {
+        if (disposed) return
         when (kind) {
             ReplayTrackKind.Video -> videoFormat = format
             ReplayTrackKind.Audio -> audioFormat = format
@@ -57,7 +60,7 @@ class InstantReplayBuffer(
         info: MediaCodec.BufferInfo,
         normalizedPtsUs: Long,
     ) {
-        if (info.size <= 0) return
+        if (disposed || info.size <= 0) return
 
         val writer = current ?: openSegment(normalizedPtsUs)
         if (
@@ -85,54 +88,115 @@ class InstantReplayBuffer(
         prune()
     }
 
-    @Synchronized
     fun export(
         outputPath: String,
         durationUs: Long,
     ): Boolean {
-        sealCurrent()
-        if (segments.isEmpty()) return false
+        val snapshot = synchronized(this) {
+            if (disposed) return false
 
-        val video = videoFormat ?: return false
-        val audio = audioFormat
-        val files = segments.map { it.file }
-        val desiredStartUs = (latestPtsUs - durationUs).coerceAtLeast(0L)
+            sealCurrent()
+            if (segments.isEmpty()) return false
 
-        val records = files.flatMap { readRecords(it) }
-        val firstVideoKeyframe = records.firstOrNull {
-            it.kind == ReplayTrackKind.Video &&
-                it.ptsUs >= desiredStartUs &&
-                it.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
-        } ?: records.firstOrNull {
-            it.kind == ReplayTrackKind.Video &&
-                it.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
-        } ?: return false
+            val video = videoFormat ?: return false
+            val files = segments.map { it.file }
+            files.forEach { pinnedFiles += it.absolutePath }
 
-        val startUs = firstVideoKeyframe.ptsUs
-        val selected = records.filter { it.ptsUs >= startUs }
-        if (selected.none { it.kind == ReplayTrackKind.Video }) return false
+            ExportSnapshot(
+                files = files,
+                videoFormat = video,
+                audioFormat = audioFormat,
+                latestPtsUs = latestPtsUs,
+            )
+        }
+
+        return try {
+            exportSnapshot(
+                snapshot = snapshot,
+                outputPath = outputPath,
+                durationUs = durationUs,
+            )
+        } finally {
+            synchronized(this) {
+                snapshot.files.forEach { pinnedFiles -= it.absolutePath }
+                if (disposed) {
+                    snapshot.files.forEach { runCatching { it.delete() } }
+                    cleanupDirectoryIfDisposed()
+                } else {
+                    prune()
+                }
+            }
+        }
+    }
+
+    @Synchronized
+    fun clear() {
+        disposed = true
+
+        runCatching { current?.closeAndBuild() }
+        current = null
+
+        segments.forEach { segment ->
+            if (segment.file.absolutePath !in pinnedFiles) {
+                runCatching { segment.file.delete() }
+            }
+        }
+        segments.clear()
+
+        directory.listFiles()?.forEach { file ->
+            if (file.absolutePath !in pinnedFiles) {
+                runCatching { file.delete() }
+            }
+        }
+
+        videoFormat = null
+        audioFormat = null
+        latestPtsUs = 0L
+
+        cleanupDirectoryIfDisposed()
+    }
+
+    private fun exportSnapshot(
+        snapshot: ExportSnapshot,
+        outputPath: String,
+        durationUs: Long,
+    ): Boolean {
+        val desiredStartUs =
+            (snapshot.latestPtsUs - durationUs).coerceAtLeast(0L)
+        val startUs = findReplayStartUs(
+            files = snapshot.files,
+            desiredStartUs = desiredStartUs,
+        ) ?: return false
 
         val muxer = MediaMuxer(
             outputPath,
             MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4,
         )
-        var started = false
-        return try {
-            val videoTrack = muxer.addTrack(video)
-            val audioTrack = audio?.let { muxer.addTrack(it) }
-            muxer.start()
-            started = true
+        var muxerStarted = false
 
+        return try {
+            val videoTrack = muxer.addTrack(snapshot.videoFormat)
+            val audioTrack = snapshot.audioFormat?.let { muxer.addTrack(it) }
+            muxer.start()
+            muxerStarted = true
+
+            var wroteVideo = false
             var lastVideoPts = -1L
             var lastAudioPts = -1L
 
-            selected.forEach { sample ->
-                val adjustedPts = (sample.ptsUs - startUs).coerceAtLeast(0L)
-                val track = when (sample.kind) {
-                    ReplayTrackKind.Video -> videoTrack
-                    ReplayTrackKind.Audio -> audioTrack ?: return@forEach
+            forEachRecord(snapshot.files) { sample ->
+                if (sample.ptsUs < startUs) return@forEachRecord true
+
+                val trackIndex = when (sample.kind) {
+                    ReplayTrackKind.Video -> {
+                        wroteVideo = true
+                        videoTrack
+                    }
+                    ReplayTrackKind.Audio -> audioTrack ?: return@forEachRecord true
                 }
 
+                val adjustedPts =
+                    (sample.ptsUs - startUs).coerceAtLeast(0L)
                 val monotonicPts = when (sample.kind) {
                     ReplayTrackKind.Video -> {
                         val next = maxOf(adjustedPts, lastVideoPts + 1L)
@@ -154,32 +218,131 @@ class InstantReplayBuffer(
                         sample.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv(),
                     )
                 }
+
                 muxer.writeSampleData(
-                    track,
+                    trackIndex,
                     ByteBuffer.wrap(sample.bytes),
                     info,
                 )
+                true
             }
-            true
+
+            wroteVideo
         } catch (_: Throwable) {
             false
         } finally {
-            if (started) runCatching { muxer.stop() }
+            if (muxerStarted) runCatching { muxer.stop() }
             runCatching { muxer.release() }
-            openSegment(latestPtsUs)
         }
     }
 
-    @Synchronized
-    fun clear() {
-        runCatching { current?.closeAndBuild() }
-        current = null
-        segments.forEach { runCatching { it.file.delete() } }
-        segments.clear()
-        directory.listFiles()?.forEach { runCatching { it.delete() } }
-        videoFormat = null
-        audioFormat = null
-        latestPtsUs = 0L
+    private fun findReplayStartUs(
+        files: List<File>,
+        desiredStartUs: Long,
+    ): Long? {
+        var latestKeyframeBeforeOrAt: Long? = null
+        var firstKeyframeAfter: Long? = null
+
+        forEachRecordHeader(files) { kind, ptsUs, flags ->
+            if (
+                kind != ReplayTrackKind.Video ||
+                flags and MediaCodec.BUFFER_FLAG_KEY_FRAME == 0
+            ) {
+                return@forEachRecordHeader true
+            }
+
+            if (ptsUs <= desiredStartUs) {
+                latestKeyframeBeforeOrAt = ptsUs
+                return@forEachRecordHeader true
+            }
+
+            if (firstKeyframeAfter == null) {
+                firstKeyframeAfter = ptsUs
+            }
+            true
+        }
+
+        return latestKeyframeBeforeOrAt ?: firstKeyframeAfter
+    }
+
+    private fun forEachRecordHeader(
+        files: List<File>,
+        block: (ReplayTrackKind, Long, Int) -> Boolean,
+    ) {
+        files.forEach { file ->
+            if (!file.exists() || file.length() <= 0L) return@forEach
+
+            DataInputStream(
+                BufferedInputStream(file.inputStream(), IO_BUFFER_BYTES),
+            ).use { input ->
+                while (true) {
+                    try {
+                        val kind =
+                            ReplayTrackKind.fromId(input.readUnsignedByte())
+                        val ptsUs = input.readLong()
+                        val flags = input.readInt()
+                        val size = input.readInt()
+
+                        if (size < 0 || size > MAX_SAMPLE_BYTES) return
+                        if (!block(kind, ptsUs, flags)) return
+
+                        skipFully(input, size)
+                    } catch (_: EOFException) {
+                        break
+                    }
+                }
+            }
+        }
+    }
+
+    private fun forEachRecord(
+        files: List<File>,
+        block: (ReplayRecord) -> Boolean,
+    ) {
+        files.forEach { file ->
+            if (!file.exists() || file.length() <= 0L) return@forEach
+
+            DataInputStream(
+                BufferedInputStream(file.inputStream(), IO_BUFFER_BYTES),
+            ).use { input ->
+                while (true) {
+                    try {
+                        val kind =
+                            ReplayTrackKind.fromId(input.readUnsignedByte())
+                        val ptsUs = input.readLong()
+                        val flags = input.readInt()
+                        val size = input.readInt()
+
+                        if (size < 0 || size > MAX_SAMPLE_BYTES) return
+
+                        val bytes = ByteArray(size)
+                        input.readFully(bytes)
+
+                        if (!block(ReplayRecord(kind, ptsUs, flags, bytes))) {
+                            return
+                        }
+                    } catch (_: EOFException) {
+                        break
+                    }
+                }
+            }
+        }
+    }
+
+    private fun skipFully(
+        input: DataInputStream,
+        byteCount: Int,
+    ) {
+        var remaining = byteCount
+        while (remaining > 0) {
+            val skipped = input.skipBytes(remaining)
+            if (skipped > 0) {
+                remaining -= skipped
+            } else {
+                input.readByte()
+                remaining -= 1
+            }
+        }
     }
 
     private fun openSegment(startPtsUs: Long): ReplaySegmentWriter {
@@ -194,46 +357,37 @@ class InstantReplayBuffer(
     private fun sealCurrent() {
         val writer = current ?: return
         current = null
+
         val segment = writer.closeAndBuild()
         if (segment.sampleCount > 0) {
             segments.addLast(segment)
         } else {
             runCatching { segment.file.delete() }
         }
+
         prune()
     }
 
     private fun prune() {
-        val keepAfterUs = (latestPtsUs - maxDurationUs - SEGMENT_DURATION_US)
-            .coerceAtLeast(0L)
+        val keepAfterUs =
+            (latestPtsUs - maxDurationUs - SEGMENT_DURATION_US)
+                .coerceAtLeast(0L)
+
         while (segments.size > 1) {
             val first = segments.first()
             if (first.endPtsUs >= keepAfterUs) break
+            if (first.file.absolutePath in pinnedFiles) break
+
             segments.removeFirst()
             runCatching { first.file.delete() }
         }
     }
 
-    private fun readRecords(file: File): List<ReplayRecord> {
-        if (!file.exists() || file.length() <= 0L) return emptyList()
-        val result = mutableListOf<ReplayRecord>()
-        DataInputStream(BufferedInputStream(file.inputStream())).use { input ->
-            while (true) {
-                try {
-                    val kind = ReplayTrackKind.fromId(input.readUnsignedByte())
-                    val ptsUs = input.readLong()
-                    val flags = input.readInt()
-                    val size = input.readInt()
-                    if (size < 0 || size > MAX_SAMPLE_BYTES) break
-                    val bytes = ByteArray(size)
-                    input.readFully(bytes)
-                    result += ReplayRecord(kind, ptsUs, flags, bytes)
-                } catch (_: EOFException) {
-                    break
-                }
-            }
-        }
-        return result
+    private fun cleanupDirectoryIfDisposed() {
+        if (!disposed || pinnedFiles.isNotEmpty()) return
+
+        directory.listFiles()?.forEach { runCatching { it.delete() } }
+        runCatching { directory.delete() }
     }
 
     private class ReplaySegmentWriter(
@@ -241,10 +395,12 @@ class InstantReplayBuffer(
         val startPtsUs: Long,
     ) {
         private val output = DataOutputStream(
-            BufferedOutputStream(file.outputStream()),
+            BufferedOutputStream(file.outputStream(), IO_BUFFER_BYTES),
         )
+
         var sampleCount: Int = 0
             private set
+
         private var endPtsUs: Long = startPtsUs
 
         fun write(
@@ -258,6 +414,7 @@ class InstantReplayBuffer(
             output.writeInt(flags)
             output.writeInt(bytes.size)
             output.write(bytes)
+
             sampleCount += 1
             endPtsUs = maxOf(endPtsUs, ptsUs)
         }
@@ -265,6 +422,7 @@ class InstantReplayBuffer(
         fun closeAndBuild(): ReplaySegment {
             runCatching { output.flush() }
             runCatching { output.close() }
+
             return ReplaySegment(
                 file = file,
                 startPtsUs = startPtsUs,
@@ -288,8 +446,16 @@ class InstantReplayBuffer(
         val bytes: ByteArray,
     )
 
+    private data class ExportSnapshot(
+        val files: List<File>,
+        val videoFormat: MediaFormat,
+        val audioFormat: MediaFormat?,
+        val latestPtsUs: Long,
+    )
+
     companion object {
         private const val SEGMENT_DURATION_US = 5_000_000L
         private const val MAX_SAMPLE_BYTES = 16 * 1024 * 1024
+        private const val IO_BUFFER_BYTES = 64 * 1024
     }
 }
