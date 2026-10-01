@@ -349,9 +349,13 @@ class RecordingService : Service() {
             start = true,
             name = "MemoryCapture-FinalizeInterrupted",
         ) {
-            val saved = recorderEngine.stopAndSave()
+            val saved = runCatching {
+                recorderEngine.stopAndSave()
+            }.getOrNull()
             val recovered = if (saved == null) {
-                recoveryManager.recoverIfNeeded()
+                runCatching {
+                    recoveryManager.recoverIfNeeded()
+                }.getOrNull()
             } else {
                 null
             }
@@ -378,7 +382,6 @@ class RecordingService : Service() {
                     }
 
                     else -> {
-                        recoveryManager.clearInterruptedFlag()
                         RecordingStateStore.forceError(
                             RecordingError.RecordingInterrupted,
                         )

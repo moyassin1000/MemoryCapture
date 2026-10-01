@@ -33,6 +33,7 @@ import com.memorycapture.app.recording.SavedRecordingStore
 import com.memorycapture.app.service.RecordingService
 import com.memorycapture.app.ui.theme.MemoryCaptureTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -43,6 +44,7 @@ class MainActivity : AppCompatActivity() {
     }
     private val preferences by lazy { AppPreferences(applicationContext) }
     private val recoveryManager by lazy { RecordingRecoveryManager(applicationContext) }
+    private var startupRecoveryJob: Job? = null
 
     private val projectionPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -92,16 +94,30 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         runCatching { ProBillingManager.initialize(applicationContext) }
 
-        lifecycleScope.launch {
-            val recovered = withContext(Dispatchers.IO) {
-                recoveryManager.recoverIfNeeded()
+        startupRecoveryJob = lifecycleScope.launch {
+            val shouldAttemptRecovery = when (RecordingStateStore.state.value) {
+                RecordingState.Idle,
+                RecordingState.Completed,
+                is RecordingState.Error -> true
+
+                else -> false
             }
-            if (recovered != null) {
-                SavedRecordingStore.setSaved(
-                    displayName = recovered.displayName,
-                    location = recovered.locationLabel,
-                )
-                RecordingStateStore.transition(RecordingState.Completed)
+
+            if (shouldAttemptRecovery) {
+                val recovered = withContext(Dispatchers.IO) {
+                    recoveryManager.recoverIfNeeded()
+                }
+                if (recovered != null) {
+                    SavedRecordingStore.setSaved(
+                        displayName = recovered.displayName,
+                        location = recovered.locationLabel,
+                    )
+                    RecordingStateStore.transition(RecordingState.Completed)
+                } else if (recoveryManager.hasInterruptedSession()) {
+                    RecordingStateStore.forceError(
+                        RecordingError.RecordingInterrupted,
+                    )
+                }
             }
         }
 
@@ -131,8 +147,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestRecording() {
-        if (!RecordingStateStore.transition(RecordingState.Preparing)) return
         lifecycleScope.launch {
+            startupRecoveryJob?.join()
+
+            if (recoveryManager.hasInterruptedSession()) {
+                RecordingStateStore.forceError(
+                    RecordingError.RecordingInterrupted,
+                )
+                return@launch
+            }
+
+            if (!RecordingStateStore.transition(RecordingState.Preparing)) {
+                return@launch
+            }
             continueRecordingPermissionFlow()
         }
     }
