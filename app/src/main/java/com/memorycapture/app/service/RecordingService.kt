@@ -52,6 +52,7 @@ class RecordingService : Service() {
     private val recoveryHandler = Handler(Looper.getMainLooper())
     private val guardianHandler = Handler(Looper.getMainLooper())
     private val callMonitorHandler = Handler(Looper.getMainLooper())
+    private var recordingWakeLock: PowerManager.WakeLock? = null
     private var floatingControls: FloatingRecordingControls? = null
     private var replayDurationSeconds = InstantReplayDuration.Seconds60.seconds
     private val screenshotInFlight = AtomicBoolean(false)
@@ -225,6 +226,7 @@ class RecordingService : Service() {
                 bitratePreset = videoBitratePreset,
             )
         }.onSuccess {
+            acquireRecordingWakeLock()
             RecordingSessionStore.markStarted()
             recoveryManager.markSessionActive()
             recoveryCheckpointEnabled = true
@@ -241,6 +243,7 @@ class RecordingService : Service() {
             floatingControls?.show()
             floatingControls?.updatePaused(false)
         }.onFailure { error ->
+            releaseRecordingWakeLock()
             recorderEngine.abort()
             RecordingSessionStore.clear()
             intentionalStop = true
@@ -263,6 +266,7 @@ class RecordingService : Service() {
 
         runCatching { recorderEngine.pause() }
             .onSuccess {
+                releaseRecordingWakeLock()
                 RecordingSessionStore.markPaused()
                 RecordingStateStore.transition(RecordingState.Paused)
                 updateForegroundNotification(paused = true)
@@ -279,12 +283,14 @@ class RecordingService : Service() {
 
         runCatching { recorderEngine.resume() }
             .onSuccess {
+                acquireRecordingWakeLock()
                 RecordingSessionStore.markResumed()
                 RecordingStateStore.transition(RecordingState.Recording)
                 updateForegroundNotification(paused = false)
                 floatingControls?.updatePaused(false)
             }
             .onFailure {
+                releaseRecordingWakeLock()
                 RecordingStateStore.forceError(RecordingError.RecordingInterrupted)
                 stopForegroundAndSelf()
             }
@@ -309,6 +315,7 @@ class RecordingService : Service() {
         floatingControls?.hide()
         intentionalStop = true
         finalizationInFlight = true
+        acquireRecordingWakeLock()
 
         val highlights = RecordingSessionStore.snapshotHighlights()
 
@@ -357,6 +364,7 @@ class RecordingService : Service() {
 
                 finalizationInFlight = false
                 RecordingSessionStore.clear()
+                releaseRecordingWakeLock()
                 stopForegroundAndSelf()
             }
         }
@@ -380,6 +388,7 @@ class RecordingService : Service() {
         floatingControls?.hide()
         intentionalStop = true
         finalizationInFlight = true
+        acquireRecordingWakeLock()
 
         val highlights = RecordingSessionStore.snapshotHighlights()
 
@@ -428,6 +437,7 @@ class RecordingService : Service() {
 
                 finalizationInFlight = false
                 RecordingSessionStore.clear()
+                releaseRecordingWakeLock()
                 stopForegroundAndSelf()
             }
         }
@@ -560,6 +570,16 @@ class RecordingService : Service() {
                     storageWarning = destinationWarning,
                     workingStorageWarning = workingStorageWarning,
                     thermalWarning = thermalWarning,
+                    microphoneMutedBySystem =
+                        getSystemService(AudioManager::class.java).isMicrophoneMute,
+                    screenInteractive =
+                        getSystemService(PowerManager::class.java).isInteractive,
+                    cpuProtectionActive =
+                        recordingWakeLock?.isHeld == true ||
+                            RecordingStateStore.state.value is RecordingState.Paused,
+                    batteryOptimizationRestricted =
+                        !getSystemService(PowerManager::class.java)
+                            .isIgnoringBatteryOptimizations(packageName),
                 ),
             )
 
@@ -714,6 +734,31 @@ class RecordingService : Service() {
         }
     }
 
+    private fun acquireRecordingWakeLock() {
+        val existing = recordingWakeLock
+        if (existing?.isHeld == true) return
+
+        val wakeLock = existing ?: getSystemService(PowerManager::class.java)
+            .newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "${packageName}:MemoryCaptureRecording",
+            )
+            .apply {
+                setReferenceCounted(false)
+                recordingWakeLock = this
+            }
+
+        runCatching { wakeLock.acquire() }
+    }
+
+    private fun releaseRecordingWakeLock() {
+        val wakeLock = recordingWakeLock ?: return
+        if (wakeLock.isHeld) {
+            runCatching { wakeLock.release() }
+        }
+        recordingWakeLock = null
+    }
+
     private fun currentThermalStatusRaw(): Int =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             getSystemService(PowerManager::class.java).currentThermalStatus
@@ -859,6 +904,7 @@ class RecordingService : Service() {
         }
 
         RecordingSessionStore.clear()
+        releaseRecordingWakeLock()
         projectionController.stop()
         super.onDestroy()
     }
