@@ -270,6 +270,11 @@
     <string name="guardian_thermal_warm">مرتفعة قليلًا</string>
     <string name="guardian_thermal_hot">مرتفعة</string>
     <string name="guardian_thermal_critical">حرجة</string>
+    <string name="guardian_audio_line">الصوت: %1$s</string>
+    <string name="guardian_audio_ok">يعمل بشكل طبيعي</string>
+    <string name="guardian_audio_microphone_lost">تم فقد اتصال الميكروفون، وسيستمر تسجيل الفيديو.</string>
+    <string name="guardian_audio_device_lost">تم فقد صوت الجهاز، وسيستمر تسجيل الفيديو.</string>
+    <string name="guardian_audio_all_lost">توقف التقاط الصوت، وسيستمر تسجيل الفيديو.</string>
     <string name="guardian_warning">يوجد خطر على استمرار التسجيل. سيحاول MemoryCapture الحفظ بأمان قبل الوصول لمرحلة الخطر.</string>
     <string name="guardian_unknown">غير متاح</string>
 

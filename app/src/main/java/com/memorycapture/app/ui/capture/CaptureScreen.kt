@@ -65,6 +65,7 @@ import com.memorycapture.app.data.preferences.InstantReplayDuration
 import com.memorycapture.app.data.preferences.RecordingFrameRate
 import com.memorycapture.app.data.preferences.RecordingQuality
 import com.memorycapture.app.data.preferences.VideoBitratePreset
+import com.memorycapture.app.recording.AudioCaptureHealth
 import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.GuardianThermalLevel
 import com.memorycapture.app.recording.RecordingGuardianStore
@@ -300,9 +301,14 @@ fun CaptureScreen(
                             destinationSpaceKnown =
                                 guardianStatus.destinationSpaceKnown,
                             thermalLevel = guardianStatus.thermalLevel,
+                            audioHealth = guardianStatus.audioHealth,
                             warning = guardianStatus.storageWarning ||
                                 guardianStatus.workingStorageWarning ||
-                                guardianStatus.thermalWarning,
+                                guardianStatus.thermalWarning ||
+                                (
+                                    guardianStatus.audioHealth != AudioCaptureHealth.Healthy &&
+                                        guardianStatus.audioHealth != AudioCaptureHealth.NotRequested
+                                    ),
                         )
                     }
                 }
@@ -457,6 +463,7 @@ private fun RecordingGuardianCard(
     remainingSeconds: Long?,
     destinationSpaceKnown: Boolean,
     thermalLevel: GuardianThermalLevel,
+    audioHealth: AudioCaptureHealth,
     warning: Boolean,
 ) {
     Card(
@@ -521,6 +528,28 @@ private fun RecordingGuardianCard(
                 ),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            if (
+                audioHealth != AudioCaptureHealth.Healthy &&
+                audioHealth != AudioCaptureHealth.NotRequested
+            ) {
+                Text(
+                    text = stringResource(
+                        R.string.guardian_audio_line,
+                        when (audioHealth) {
+                            AudioCaptureHealth.MicrophoneLost ->
+                                stringResource(R.string.guardian_audio_microphone_lost)
+                            AudioCaptureHealth.DeviceAudioLost ->
+                                stringResource(R.string.guardian_audio_device_lost)
+                            AudioCaptureHealth.AllAudioLost ->
+                                stringResource(R.string.guardian_audio_all_lost)
+                            else ->
+                                stringResource(R.string.guardian_audio_ok)
+                        },
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             if (warning) {
                 Text(
                     text = stringResource(R.string.guardian_warning),

@@ -270,6 +270,11 @@
     <string name="guardian_thermal_warm">Warm</string>
     <string name="guardian_thermal_hot">Hot</string>
     <string name="guardian_thermal_critical">Critical</string>
+    <string name="guardian_audio_line">Audio: %1$s</string>
+    <string name="guardian_audio_ok">Working normally</string>
+    <string name="guardian_audio_microphone_lost">Microphone input was lost. Video recording will continue.</string>
+    <string name="guardian_audio_device_lost">Device audio was lost. Video recording will continue.</string>
+    <string name="guardian_audio_all_lost">Audio capture stopped. Video recording will continue.</string>
     <string name="guardian_warning">Recording stability is at risk. MemoryCapture will try to save safely before conditions become unsafe.</string>
     <string name="guardian_unknown">Unavailable</string>
 

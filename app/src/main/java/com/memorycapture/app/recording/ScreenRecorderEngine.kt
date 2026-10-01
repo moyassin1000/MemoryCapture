@@ -417,7 +417,11 @@ class ScreenRecorderEngine(
             return null
         }
 
-        return importReplayFile(tempFile)
+        val imported = importReplayFile(tempFile)
+        if (imported == null) {
+            runCatching { tempFile.delete() }
+        }
+        return imported
     }
 
     @Synchronized
@@ -481,7 +485,13 @@ class ScreenRecorderEngine(
             if (!signaled) stoppedCleanly = false
 
             activeAudio?.stopAndWait()
-            if (activeAudio?.failure != null) {
+            val audioTrackReady = synchronized(muxerLock) {
+                expectedTrackCount == 1 || audioTrackIndex >= 0
+            }
+            if (
+                activeAudio?.failure != null &&
+                !audioTrackReady
+            ) {
                 stoppedCleanly = false
             }
 
@@ -584,6 +594,27 @@ class ScreenRecorderEngine(
     }
 
     fun isActive(): Boolean = started
+
+    fun audioHealth(): AudioCaptureHealth =
+        audioCaptureEngine?.health() ?: AudioCaptureHealth.NotRequested
+
+    fun hasFatalRuntimeFailure(): Boolean {
+        if (drainFailure != null) return true
+
+        val videoThreadDead =
+            started && drainThread != null && drainThread?.isAlive == false
+        if (videoThreadDead) return true
+
+        val audioEngine = audioCaptureEngine
+        val audioStoppedBeforeTrackReady =
+            audioEngine != null &&
+                !audioEngine.isRunning() &&
+                synchronized(muxerLock) {
+                    expectedTrackCount > 1 && audioTrackIndex < 0
+                }
+
+        return audioStoppedBeforeTrackReady
+    }
 
     fun estimatedOutputBytesPerSecond(): Long =
         estimatedBytesPerSecond.coerceAtLeast(MIN_ESTIMATED_BYTES_PER_SECOND)
