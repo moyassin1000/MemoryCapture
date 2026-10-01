@@ -82,6 +82,7 @@ class AudioCaptureEngine(
     private var activeMicSource = MediaRecorder.AudioSource.MIC
 
     private var speakerAssistApplied = false
+    private var previousCommunicationDeviceId: Int? = null
     private var legacySpeakerWasOn = false
 
     @Volatile
@@ -190,6 +191,7 @@ class AudioCaptureEngine(
         voipAssistEnabled = voipCaptureAssistEnabled
         callMicSilencedBySystem = false
         activeMicSource = MediaRecorder.AudioSource.MIC
+        previousCommunicationDeviceId = null
         lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
         paused = false
         running = true
@@ -343,6 +345,35 @@ class AudioCaptureEngine(
                 if (
                     microphoneRequested &&
                     voipAssistEnabled &&
+                    !micAvailable &&
+                    nowElapsedMs - lastMicRecoveryAttemptElapsedMs >=
+                        CALL_MIC_RECOVERY_INTERVAL_MS
+                ) {
+                    lastMicRecoveryAttemptElapsedMs = nowElapsedMs
+                    val targetIndex = if (communicationActive) {
+                        (micSourceIndex + 1)
+                            .coerceAtMost(CALL_MIC_AUDIO_SOURCES.lastIndex)
+                    } else {
+                        0
+                    }
+                    val replacement = replaceMicrophoneRecord(
+                        current = mic,
+                        format = audioFormat,
+                        bufferSize = bufferSize,
+                        preferredMicDeviceId = preferredMicDeviceId,
+                        audioSource = CALL_MIC_AUDIO_SOURCES[targetIndex],
+                    )
+                    if (replacement != null) {
+                        mic = replacement
+                        micAvailable = true
+                        micSourceIndex = targetIndex
+                        callMicSilencedBySystem = false
+                    }
+                }
+
+                if (
+                    microphoneRequested &&
+                    voipAssistEnabled &&
                     !communicationActive &&
                     (mic == null || micSourceIndex != 0) &&
                     nowElapsedMs - lastMicRecoveryAttemptElapsedMs >=
@@ -391,7 +422,12 @@ class AudioCaptureEngine(
                     0
                 }
 
-                val playbackBytes = if (playbackAvailable && playback != null) {
+                val playbackBytes = if (
+                    communicationActive &&
+                    mode == AudioMode.DeviceAndMic
+                ) {
+                    0
+                } else if (playbackAvailable && playback != null) {
                     val read = readAudio(playback, playbackBuffer)
                     if (read < 0) {
                         playbackAvailable = false
@@ -748,6 +784,11 @@ class AudioCaptureEngine(
                 }
 
             if (speaker != null) {
+                if (!speakerAssistApplied) {
+                    previousCommunicationDeviceId =
+                        audioManager.communicationDevice?.id
+                }
+
                 val alreadyOnSpeaker =
                     audioManager.communicationDevice?.id == speaker.id
                 speakerAssistApplied = alreadyOnSpeaker || runCatching {
@@ -773,7 +814,21 @@ class AudioCaptureEngine(
         if (!speakerAssistApplied) return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            runCatching { audioManager.clearCommunicationDevice() }
+            val previousId = previousCommunicationDeviceId
+            val restored = previousId?.let { id ->
+                audioManager.availableCommunicationDevices
+                    .firstOrNull { it.id == id }
+                    ?.let { device ->
+                        runCatching {
+                            audioManager.setCommunicationDevice(device)
+                        }.getOrDefault(false)
+                    }
+            } == true
+
+            if (!restored) {
+                runCatching { audioManager.clearCommunicationDevice() }
+            }
+            previousCommunicationDeviceId = null
         } else {
             @Suppress("DEPRECATION")
             runCatching {
@@ -960,8 +1015,6 @@ class AudioCaptureEngine(
         private val CALL_MIC_AUDIO_SOURCES = intArrayOf(
             MediaRecorder.AudioSource.MIC,
             MediaRecorder.AudioSource.VOICE_RECOGNITION,
-            MediaRecorder.AudioSource.CAMCORDER,
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
         )
         private const val EOS_QUEUE_RETRIES = 100
         private const val EOS_DRAIN_IDLE_LIMIT = 100
