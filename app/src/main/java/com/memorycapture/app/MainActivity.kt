@@ -207,6 +207,7 @@ class MainActivity : AppCompatActivity() {
         val recordingFrameRate = preferences.recordingFrameRate.first()
         val videoBitratePreset = preferences.videoBitratePreset.first()
         val instantReplayDuration = preferences.instantReplayDuration.first()
+        val voipCaptureAssistEnabled = preferences.voipCaptureAssistEnabled.first()
 
         val intent = Intent(this, RecordingService::class.java)
             .setAction(RecordingService.ACTION_START)
@@ -222,6 +223,10 @@ class MainActivity : AppCompatActivity() {
             .putExtra(
                 RecordingService.EXTRA_INSTANT_REPLAY_DURATION,
                 instantReplayDuration.name,
+            )
+            .putExtra(
+                RecordingService.EXTRA_VOIP_CAPTURE_ASSIST_ENABLED,
+                voipCaptureAssistEnabled,
             )
 
         ContextCompat.startForegroundService(this, intent)
