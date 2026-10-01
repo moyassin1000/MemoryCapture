@@ -414,6 +414,11 @@ class AudioCaptureEngine(
                         if (replacement != null && replacement !== mic) {
                             mic = replacement
                             micAvailable = true
+                            updateRuntimeHealth(
+                                mode = mode,
+                                micAvailable = true,
+                                playbackAvailable = playbackAvailable,
+                            )
                             micSourceIndex = nextIndex
                             lastMicRecoveryAttemptElapsedMs = nowElapsedMs
                             callMicSilencedBySystem = false
@@ -819,11 +824,13 @@ class AudioCaptureEngine(
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
 
         return runCatching {
-            audioManager.activeRecordingConfigurations
-                .firstOrNull { configuration ->
-                    configuration.clientAudioSessionId == record.audioSessionId
-                }
-                ?.isClientSilenced == true
+            record.activeRecordingConfiguration?.isClientSilenced
+                ?: audioManager.activeRecordingConfigurations
+                    .firstOrNull { configuration ->
+                        configuration.clientAudioSessionId == record.audioSessionId
+                    }
+                    ?.isClientSilenced
+                ?: false
         }.getOrDefault(false)
     }
 
