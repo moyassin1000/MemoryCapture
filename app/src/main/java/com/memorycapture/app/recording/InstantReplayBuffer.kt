@@ -145,7 +145,8 @@ class InstantReplayBuffer(
         directory.listFiles()?.forEach { file ->
             if (
                 file.absolutePath !in activePaths &&
-                file.lastModified() in 1 until cutoff
+                file.lastModified() > 0L &&
+                file.lastModified() < cutoff
             ) {
                 runCatching { file.delete() }
             }
