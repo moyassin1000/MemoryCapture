@@ -261,5 +261,14 @@
     <string name="highlights">اللحظات المهمة</string>
     <string name="highlights_count">%1$d علامة محفوظة</string>
     <string name="highlight_number_time">علامة %1$d • %2$s</string>
+    <string name="recording_guardian">حماية التسجيل</string>
+    <string name="guardian_storage_line">المساحة: %1$s • الوقت المتبقي التقريبي: %2$s</string>
+    <string name="guardian_thermal_line">الحرارة: %1$s</string>
+    <string name="guardian_thermal_normal">طبيعية</string>
+    <string name="guardian_thermal_warm">مرتفعة قليلًا</string>
+    <string name="guardian_thermal_hot">مرتفعة</string>
+    <string name="guardian_thermal_critical">حرجة</string>
+    <string name="guardian_warning">يوجد خطر على استمرار التسجيل. سيحاول MemoryCapture الحفظ بأمان قبل الوصول لمرحلة الخطر.</string>
+    <string name="guardian_unknown">غير متاح</string>
 
 </resources>

@@ -66,6 +66,8 @@ import com.memorycapture.app.data.preferences.RecordingFrameRate
 import com.memorycapture.app.data.preferences.RecordingQuality
 import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.recording.CountdownStore
+import com.memorycapture.app.recording.GuardianThermalLevel
+import com.memorycapture.app.recording.RecordingGuardianStore
 import com.memorycapture.app.recording.RecordingSessionStore
 import com.memorycapture.app.recording.RecordingState
 import com.memorycapture.app.recording.RecordingStateStore
@@ -75,6 +77,7 @@ import com.memorycapture.app.ui.components.PrimaryRecordingButton
 import com.memorycapture.app.ui.components.RecordingStatusCard
 import com.memorycapture.app.ui.components.rememberRecordingElapsed
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,6 +136,7 @@ fun CaptureScreen(
         }
     }
     val state by RecordingStateStore.state.collectAsStateWithLifecycle()
+    val guardianStatus by RecordingGuardianStore.status.collectAsStateWithLifecycle()
     val countdown by CountdownStore.seconds.collectAsStateWithLifecycle()
     val startedAt by RecordingSessionStore.startedAtElapsedRealtime.collectAsStateWithLifecycle()
     val pausedAt by RecordingSessionStore.pausedAtElapsedRealtime.collectAsStateWithLifecycle()
@@ -284,6 +288,18 @@ fun CaptureScreen(
                     )
                 }
 
+                if (active) {
+                    item {
+                        RecordingGuardianCard(
+                            availableBytes = guardianStatus.availableBytes,
+                            remainingSeconds = guardianStatus.estimatedRemainingSeconds,
+                            thermalLevel = guardianStatus.thermalLevel,
+                            warning = guardianStatus.storageWarning ||
+                                guardianStatus.thermalWarning,
+                        )
+                    }
+                }
+
                 item {
                     PrimaryRecordingButton(
                         active = active,
@@ -424,6 +440,93 @@ fun CaptureScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RecordingGuardianCard(
+    availableBytes: Long,
+    remainingSeconds: Long?,
+    thermalLevel: GuardianThermalLevel,
+    warning: Boolean,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(10.dp, MaterialTheme.shapes.large),
+        colors = CardDefaults.cardColors(
+            containerColor = if (warning) {
+                MaterialTheme.colorScheme.errorContainer
+            } else {
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+            },
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.recording_guardian),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+            )
+            Text(
+                text = stringResource(
+                    R.string.guardian_storage_line,
+                    formatGuardianStorage(availableBytes),
+                    remainingSeconds?.let(::formatGuardianRemaining)
+                        ?: stringResource(R.string.guardian_unknown),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(
+                    R.string.guardian_thermal_line,
+                    when (thermalLevel) {
+                        GuardianThermalLevel.Normal ->
+                            stringResource(R.string.guardian_thermal_normal)
+                        GuardianThermalLevel.Warm ->
+                            stringResource(R.string.guardian_thermal_warm)
+                        GuardianThermalLevel.Hot ->
+                            stringResource(R.string.guardian_thermal_hot)
+                        GuardianThermalLevel.Critical ->
+                            stringResource(R.string.guardian_thermal_critical)
+                    },
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (warning) {
+                Text(
+                    text = stringResource(R.string.guardian_warning),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        }
+    }
+}
+
+private fun formatGuardianStorage(bytes: Long): String {
+    if (bytes <= 0L) return "—"
+    val gib = bytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+    return if (gib >= 1.0) {
+        String.format(Locale.getDefault(), "%.1f GB", gib)
+    } else {
+        val mib = bytes.toDouble() / (1024.0 * 1024.0)
+        String.format(Locale.getDefault(), "%.0f MB", mib)
+    }
+}
+
+private fun formatGuardianRemaining(seconds: Long): String {
+    val safe = seconds.coerceAtLeast(0L)
+    val hours = safe / 3600L
+    val minutes = (safe % 3600L) / 60L
+    return if (hours > 0L) {
+        "${hours}h ${minutes}m"
+    } else {
+        "${minutes}m"
     }
 }
 
