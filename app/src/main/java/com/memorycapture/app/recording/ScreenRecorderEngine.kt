@@ -15,6 +15,7 @@ import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
@@ -76,6 +77,9 @@ class ScreenRecorderEngine(
 
     @Volatile
     private var lastVideoDrainHeartbeatElapsedMs = 0L
+
+    @Volatile
+    private var lastVideoSampleElapsedMs = 0L
 
     private var videoTrackIndex = -1
     private var audioTrackIndex = -1
@@ -177,6 +181,7 @@ class ScreenRecorderEngine(
             drainFailure = null
             abortDrain = false
             lastVideoDrainHeartbeatElapsedMs = SystemClock.elapsedRealtime()
+            lastVideoSampleElapsedMs = SystemClock.elapsedRealtime()
             paused = false
             started = true
 
@@ -616,8 +621,38 @@ class ScreenRecorderEngine(
         started &&
             !paused &&
             drainThread?.isAlive == true &&
-            lastVideoDrainHeartbeatElapsedMs > 0L &&
-            nowElapsedMs - lastVideoDrainHeartbeatElapsedMs >= thresholdMs
+            lastVideoSampleElapsedMs > 0L &&
+            nowElapsedMs - lastVideoSampleElapsedMs >= thresholdMs
+
+    fun videoFrameAgeMs(nowElapsedMs: Long): Long =
+        if (lastVideoSampleElapsedMs <= 0L) {
+            Long.MAX_VALUE
+        } else {
+            (nowElapsedMs - lastVideoSampleElapsedMs).coerceAtLeast(0L)
+        }
+
+    fun rebindVideoCaptureSurface(): Boolean {
+        val activeDisplay = virtualDisplay ?: return false
+        val activeSurface = inputSurface ?: return false
+        val activeEncoder = encoder ?: return false
+
+        if (!started || paused) return false
+
+        return synchronized(captureSurfaceLock) {
+            runCatching {
+                activeDisplay.surface = null
+                activeDisplay.surface = activeSurface
+
+                val requestSyncFrame = Bundle().apply {
+                    putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
+                }
+                activeEncoder.setParameters(requestSyncFrame)
+
+                lastVideoSampleElapsedMs = SystemClock.elapsedRealtime()
+                true
+            }.getOrDefault(false)
+        }
+    }
 
     fun isAudioCaptureStalled(
         nowElapsedMs: Long,
@@ -719,6 +754,9 @@ class ScreenRecorderEngine(
                             if (bufferInfo.size > 0) {
                                 encodedData.position(bufferInfo.offset)
                                 encodedData.limit(bufferInfo.offset + bufferInfo.size)
+
+                                lastVideoSampleElapsedMs =
+                                    SystemClock.elapsedRealtime()
 
                                 writeEncodedSample(
                                     kind = TrackKind.Video,
@@ -1284,6 +1322,8 @@ class ScreenRecorderEngine(
         estimatedBytesPerSecond = 0L
         drainFailure = null
         abortDrain = false
+        lastVideoDrainHeartbeatElapsedMs = 0L
+        lastVideoSampleElapsedMs = 0L
         paused = false
         resetMuxerState(1)
     }

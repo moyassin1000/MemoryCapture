@@ -37,6 +37,7 @@ import com.memorycapture.app.recording.RecordingStateStore
 import com.memorycapture.app.recording.SavedRecording
 import com.memorycapture.app.recording.SavedRecordingStore
 import com.memorycapture.app.recording.ScreenRecorderEngine
+import com.memorycapture.app.recording.VoipCaptureStatus
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
@@ -59,6 +60,9 @@ class RecordingService : Service() {
     @Volatile
     private var recoveryCheckpointInFlight = false
     private var recordingTreeUri: String? = null
+    private var lastVoipStatus = VoipCaptureStatus.Inactive
+    private var videoRebindAttempts = 0
+    private var lastVideoRebindElapsedMs = 0L
     @Volatile
     private var lastMaintenanceElapsedMs = 0L
     private var guardianStopInProgress = false
@@ -222,6 +226,9 @@ class RecordingService : Service() {
             recoveryCheckpointEnabled = true
             guardianStopInProgress = false
             longSessionWatchdog.reset()
+            lastVoipStatus = VoipCaptureStatus.Inactive
+            videoRebindAttempts = 0
+            lastVideoRebindElapsedMs = 0L
             lastMaintenanceElapsedMs = SystemClock.elapsedRealtime()
             scheduleRecoveryCheckpoint()
             scheduleGuardian()
@@ -562,13 +569,56 @@ class RecordingService : Service() {
 
             val thermalDanger = currentThermalStatusRaw() >= THERMAL_EMERGENCY_STATUS
             val nowElapsedMs = SystemClock.elapsedRealtime()
+            val callActive = voipStatus != VoipCaptureStatus.Inactive
+            val callJustEnded =
+                lastVoipStatus != VoipCaptureStatus.Inactive &&
+                    voipStatus == VoipCaptureStatus.Inactive
+
+            var videoStalled = recorderEngine.isVideoDrainStalled(
+                nowElapsedMs = nowElapsedMs,
+                thresholdMs = VIDEO_DRAIN_STALL_THRESHOLD_MS,
+            )
+
+            if (
+                callJustEnded &&
+                recorderEngine.videoFrameAgeMs(nowElapsedMs) >=
+                    POST_CALL_REBIND_THRESHOLD_MS
+            ) {
+                if (recorderEngine.rebindVideoCaptureSurface()) {
+                    videoRebindAttempts = 1
+                    lastVideoRebindElapsedMs = nowElapsedMs
+                    longSessionWatchdog.reset()
+                    videoStalled = false
+                }
+            } else if (
+                !callActive &&
+                videoStalled &&
+                videoRebindAttempts < MAX_VIDEO_REBIND_ATTEMPTS &&
+                nowElapsedMs - lastVideoRebindElapsedMs >=
+                    VIDEO_REBIND_RETRY_INTERVAL_MS
+            ) {
+                if (recorderEngine.rebindVideoCaptureSurface()) {
+                    videoRebindAttempts += 1
+                    lastVideoRebindElapsedMs = nowElapsedMs
+                    longSessionWatchdog.reset()
+                    videoStalled = false
+                }
+            }
+
+            if (
+                !callActive &&
+                recorderEngine.videoFrameAgeMs(nowElapsedMs) <
+                    VIDEO_HEALTHY_FRAME_AGE_MS
+            ) {
+                videoRebindAttempts = 0
+            }
+
+            lastVoipStatus = voipStatus
+
             val watchdogDecision = longSessionWatchdog.evaluate(
                 LongSessionWatchdogInput(
                     fatalRuntimeFailure = recorderEngine.hasFatalRuntimeFailure(),
-                    videoDrainStalled = recorderEngine.isVideoDrainStalled(
-                        nowElapsedMs = nowElapsedMs,
-                        thresholdMs = VIDEO_DRAIN_STALL_THRESHOLD_MS,
-                    ),
+                    videoDrainStalled = !callActive && videoStalled,
                     audioCaptureStalled = recorderEngine.isAudioCaptureStalled(
                         nowElapsedMs = nowElapsedMs,
                         thresholdMs = AUDIO_STALL_THRESHOLD_MS,
@@ -809,7 +859,11 @@ class RecordingService : Service() {
         private const val RECOVERY_INTERVAL_MS = 30_000L
         private const val RECOVERY_WINDOW_SECONDS = 60
         private const val GUARDIAN_INTERVAL_MS = 5_000L
-        private const val VIDEO_DRAIN_STALL_THRESHOLD_MS = 20_000L
+        private const val VIDEO_DRAIN_STALL_THRESHOLD_MS = 8_000L
+        private const val POST_CALL_REBIND_THRESHOLD_MS = 2_000L
+        private const val VIDEO_REBIND_RETRY_INTERVAL_MS = 6_000L
+        private const val VIDEO_HEALTHY_FRAME_AGE_MS = 2_000L
+        private const val MAX_VIDEO_REBIND_ATTEMPTS = 2
         private const val AUDIO_STALL_THRESHOLD_MS = 15_000L
         private const val MAINTENANCE_INTERVAL_MS = 60_000L
         private const val STORAGE_WARNING_BYTES = 500L * 1024L * 1024L
