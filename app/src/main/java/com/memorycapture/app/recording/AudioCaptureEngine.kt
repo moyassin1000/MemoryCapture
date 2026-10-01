@@ -556,6 +556,12 @@ class AudioCaptureEngine(
     fun health(): AudioCaptureHealth = runtimeHealth
 
     fun refreshVoipCaptureStatus(): VoipCaptureStatus {
+        if (!running || paused) {
+            restoreSpeakerAssist()
+            voipStatus = VoipCaptureStatus.Inactive
+            return voipStatus
+        }
+
         val communicationActive = isCommunicationActive()
 
         if (!communicationActive) {
