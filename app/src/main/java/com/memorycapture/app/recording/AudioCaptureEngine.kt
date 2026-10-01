@@ -297,6 +297,7 @@ class AudioCaptureEngine(
         var micSourceIndex = 0
         var lastMicProbeElapsedMs = 0L
         var lastMicRecoveryAttemptElapsedMs = 0L
+        var lastAccessibilityCheckElapsedMs = 0L
         var lastCommunicationActive = false
         var lastSpeakerAssistAttemptElapsedMs = 0L
 
@@ -313,6 +314,39 @@ class AudioCaptureEngine(
                 val communicationActive = isCommunicationActive()
                 val microphoneRequested =
                     mode == AudioMode.Microphone || mode == AudioMode.DeviceAndMic
+
+                if (
+                    voipAssistEnabled &&
+                    nowElapsedMs - lastAccessibilityCheckElapsedMs >=
+                        ACCESSIBILITY_ASSIST_CHECK_INTERVAL_MS
+                ) {
+                    lastAccessibilityCheckElapsedMs = nowElapsedMs
+                    accessibilityAssistEnabled =
+                        CallCaptureCompatibility.isAccessibilityAssistEnabled(context)
+                }
+
+                if (
+                    communicationActive &&
+                    !lastCommunicationActive &&
+                    microphoneRequested &&
+                    accessibilityAssistEnabled &&
+                    mic != null &&
+                    micSourceIndex == 0
+                ) {
+                    val replacement = replaceMicrophoneRecord(
+                        current = mic,
+                        format = audioFormat,
+                        bufferSize = bufferSize,
+                        preferredMicDeviceId = preferredMicDeviceId,
+                        audioSource = MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    )
+                    if (replacement !== mic) {
+                        mic = replacement
+                        micAvailable = true
+                        micSourceIndex = 1
+                        callMicSilencedBySystem = false
+                    }
+                }
 
                 if (communicationActive) {
                     if (
@@ -967,9 +1001,6 @@ class AudioCaptureEngine(
         preferredMicDeviceId: Int,
         audioSource: Int,
     ): AudioRecord? {
-        runCatching { current?.stop() }
-        runCatching { current?.release() }
-
         val replacement = runCatching {
             createMicrophoneRecord(
                 format = format,
@@ -979,10 +1010,15 @@ class AudioCaptureEngine(
             ).also { it.startRecording() }
         }.getOrNull()
 
-        microphoneRecord = replacement
         if (replacement == null) {
-            activeMicSource = MediaRecorder.AudioSource.MIC
+            microphoneRecord = current
+            return current
         }
+
+        runCatching { current?.stop() }
+        runCatching { current?.release() }
+        microphoneRecord = replacement
+        activeMicSource = audioSource
         return replacement
     }
 
@@ -1059,6 +1095,7 @@ class AudioCaptureEngine(
         private const val CALL_MIC_PROBE_INTERVAL_MS = 1_000L
         private const val CALL_MIC_RECOVERY_INTERVAL_MS = 1_000L
         private const val SPEAKER_ASSIST_REASSERT_INTERVAL_MS = 500L
+        private const val ACCESSIBILITY_ASSIST_CHECK_INTERVAL_MS = 1_000L
         private const val AUDIO_FRAME_MS = 20L
         private const val SYNTHETIC_SILENCE_PACE_MS = AUDIO_FRAME_MS
         private const val SYNTHETIC_SILENCE_BYTES =
