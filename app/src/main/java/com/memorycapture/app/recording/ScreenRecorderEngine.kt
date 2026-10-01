@@ -364,6 +364,28 @@ class ScreenRecorderEngine(
         return importReplayFile(tempFile)
     }
 
+    @Synchronized
+    fun writeRecoveryCheckpoint(
+        targetFile: File,
+        durationSeconds: Int = 60,
+    ): Boolean {
+        if (!started) return false
+
+        targetFile.parentFile?.mkdirs()
+        runCatching { targetFile.delete() }
+
+        val exported = replayBuffer?.export(
+            outputPath = targetFile.absolutePath,
+            durationUs = durationSeconds.coerceIn(5, 180) * 1_000_000L,
+        ) == true
+
+        if (!exported || !targetFile.exists() || targetFile.length() <= 0L) {
+            runCatching { targetFile.delete() }
+            return false
+        }
+        return true
+    }
+
     fun stopAndSave(): SavedRecording? {
         if (!started) return null
 
