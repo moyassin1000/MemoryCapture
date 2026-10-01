@@ -27,6 +27,14 @@ interface AudioMuxerSink {
     fun onAudioSample(buffer: ByteBuffer, info: MediaCodec.BufferInfo)
 }
 
+enum class AudioCaptureHealth {
+    NotRequested,
+    Healthy,
+    MicrophoneLost,
+    DeviceAudioLost,
+    AllAudioLost,
+}
+
 @SuppressLint("MissingPermission")
 class AudioCaptureEngine(
     private val context: Context,
@@ -45,6 +53,9 @@ class AudioCaptureEngine(
     @Volatile
     var failure: Throwable? = null
         private set
+
+    @Volatile
+    private var runtimeHealth = AudioCaptureHealth.NotRequested
 
     private var submittedFrames = 0L
 
@@ -151,6 +162,7 @@ class AudioCaptureEngine(
         encoder = localEncoder
         submittedFrames = 0L
         failure = null
+        runtimeHealth = AudioCaptureHealth.Healthy
         paused = false
         running = true
 
@@ -240,6 +252,9 @@ class AudioCaptureEngine(
         val playbackBuffer = ByteArray(bufferSize)
         val mixedBuffer = ByteArray(bufferSize)
 
+        var micAvailable = mic != null
+        var playbackAvailable = playback != null
+
         try {
             while (running && !Thread.currentThread().isInterrupted) {
                 if (paused) {
@@ -247,31 +262,49 @@ class AudioCaptureEngine(
                     continue
                 }
 
+                val micBytes = if (micAvailable && mic != null) {
+                    val read = readAudio(mic, micBuffer)
+                    if (read < 0) {
+                        micAvailable = false
+                        updateRuntimeHealth(
+                            micAvailable = false,
+                            playbackAvailable = playbackAvailable,
+                        )
+                        0
+                    } else {
+                        read
+                    }
+                } else {
+                    0
+                }
+
+                val playbackBytes = if (playbackAvailable && playback != null) {
+                    val read = readAudio(playback, playbackBuffer)
+                    if (read < 0) {
+                        playbackAvailable = false
+                        updateRuntimeHealth(
+                            micAvailable = micAvailable,
+                            playbackAvailable = false,
+                        )
+                        0
+                    } else {
+                        read
+                    }
+                } else {
+                    0
+                }
+
                 val bytes = when (mode) {
                     AudioMode.None -> 0
-
-                    AudioMode.Microphone -> {
-                        readAudio(requireNotNull(mic), micBuffer)
-                    }
-
-                    AudioMode.DeviceAudio -> {
-                        readAudio(requireNotNull(playback), playbackBuffer)
-                    }
-
-                    AudioMode.DeviceAndMic -> {
-                        val micBytes = readAudio(requireNotNull(mic), micBuffer)
-                        val playbackBytes = readAudio(
-                            requireNotNull(playback),
-                            playbackBuffer,
-                        )
-                        mixPcm16(
-                            micBuffer = micBuffer,
-                            micBytes = micBytes,
-                            playbackBuffer = playbackBuffer,
-                            playbackBytes = playbackBytes,
-                            out = mixedBuffer,
-                        )
-                    }
+                    AudioMode.Microphone -> micBytes
+                    AudioMode.DeviceAudio -> playbackBytes
+                    AudioMode.DeviceAndMic -> mixPcm16(
+                        micBuffer = micBuffer,
+                        micBytes = micBytes,
+                        playbackBuffer = playbackBuffer,
+                        playbackBytes = playbackBytes,
+                        out = mixedBuffer,
+                    )
                 }
 
                 if (bytes > 0) {
@@ -289,6 +322,16 @@ class AudioCaptureEngine(
                     sink = sink,
                     waitForEos = false,
                 )
+
+                val noRequestedSourceAvailable = when (mode) {
+                    AudioMode.None -> true
+                    AudioMode.Microphone -> !micAvailable
+                    AudioMode.DeviceAudio -> !playbackAvailable
+                    AudioMode.DeviceAndMic -> !micAvailable && !playbackAvailable
+                }
+                if (noRequestedSourceAvailable) {
+                    break
+                }
             }
 
             queueEndOfStream(activeEncoder, sink)
@@ -424,15 +467,27 @@ class AudioCaptureEngine(
     private fun readAudio(
         record: AudioRecord,
         target: ByteArray,
-    ): Int {
-        val read = record.read(
+    ): Int =
+        record.read(
             target,
             0,
             target.size,
             AudioRecord.READ_BLOCKING,
         )
-        return if (read > 0) read else 0
+
+    private fun updateRuntimeHealth(
+        micAvailable: Boolean,
+        playbackAvailable: Boolean,
+    ) {
+        runtimeHealth = when {
+            !micAvailable && !playbackAvailable -> AudioCaptureHealth.AllAudioLost
+            !micAvailable -> AudioCaptureHealth.MicrophoneLost
+            !playbackAvailable -> AudioCaptureHealth.DeviceAudioLost
+            else -> AudioCaptureHealth.Healthy
+        }
     }
+
+    fun health(): AudioCaptureHealth = runtimeHealth
 
     private fun mixPcm16(
         micBuffer: ByteArray,
@@ -531,6 +586,9 @@ class AudioCaptureEngine(
         playbackRecord = null
         worker = null
         paused = false
+        if (runtimeHealth == AudioCaptureHealth.Healthy && failure != null) {
+            runtimeHealth = AudioCaptureHealth.AllAudioLost
+        }
     }
 
     companion object {
