@@ -659,7 +659,7 @@ class RecordingService : Service() {
         const val EXTRA_INSTANT_REPLAY_DURATION = "instant_replay_duration"
         private const val CHANNEL_ID = "recording"
         private const val NOTIFICATION_ID = 1001
-        private const val RECOVERY_INTERVAL_MS = 15_000L
+        private const val RECOVERY_INTERVAL_MS = 30_000L
         private const val RECOVERY_WINDOW_SECONDS = 60
         private const val GUARDIAN_INTERVAL_MS = 5_000L
         private const val STORAGE_WARNING_BYTES = 500L * 1024L * 1024L
