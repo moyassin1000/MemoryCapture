@@ -33,6 +33,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 data class SavedRecording(
@@ -60,6 +61,7 @@ class ScreenRecorderEngine(
     private var replayBuffer: InstantReplayBuffer? = null
 
     private val muxerLock = Any()
+    private val captureSurfaceLock = Any()
     private val pendingSamples = ArrayDeque<PendingSample>()
 
     @Volatile
@@ -272,11 +274,11 @@ class ScreenRecorderEngine(
         paused = false
     }
 
-    @Synchronized
     fun captureScreenshot(): SavedScreenshot? {
-        if (!started || paused) return null
-
-        val display = virtualDisplay ?: return null
+        val display = synchronized(captureSurfaceLock) {
+            if (!started || paused) return null
+            virtualDisplay ?: return null
+        }
         val encoderSurface = inputSurface ?: return null
         val width = activeCaptureWidth
         val height = activeCaptureHeight
@@ -286,17 +288,36 @@ class ScreenRecorderEngine(
             width,
             height,
             PixelFormat.RGBA_8888,
-            2,
+            1,
         )
         val handlerThread = HandlerThread("MemoryCapture-Screenshot").apply { start() }
         val handler = Handler(handlerThread.looper)
         val latch = CountDownLatch(1)
+        val surfaceRestored = AtomicBoolean(false)
         var bitmap: Bitmap? = null
+
+        fun restoreEncoderSurface() {
+            if (!surfaceRestored.compareAndSet(false, true)) return
+            synchronized(captureSurfaceLock) {
+                if (
+                    started &&
+                    !paused &&
+                    virtualDisplay === display &&
+                    inputSurface === encoderSurface
+                ) {
+                    runCatching { display.surface = encoderSurface }
+                }
+            }
+        }
 
         imageReader.setOnImageAvailableListener({ reader ->
             val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
+
+            restoreEncoderSurface()
+
             try {
-                val plane = image.planes.firstOrNull() ?: return@setOnImageAvailableListener
+                val plane = image.planes.firstOrNull()
+                    ?: return@setOnImageAvailableListener
                 val buffer = plane.buffer
                 val pixelStride = plane.pixelStride
                 val rowStride = plane.rowStride
@@ -309,10 +330,17 @@ class ScreenRecorderEngine(
                     Bitmap.Config.ARGB_8888,
                 )
                 padded.copyPixelsFromBuffer(buffer)
+
                 bitmap = if (paddedWidth == width) {
                     padded
                 } else {
-                    Bitmap.createBitmap(padded, 0, 0, width, height).also {
+                    Bitmap.createBitmap(
+                        padded,
+                        0,
+                        0,
+                        width,
+                        height,
+                    ).also {
                         padded.recycle()
                     }
                 }
@@ -323,11 +351,19 @@ class ScreenRecorderEngine(
         }, handler)
 
         return try {
-            display.surface = imageReader.surface
-            val captured = latch.await(SCREENSHOT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            display.surface = encoderSurface
+            synchronized(captureSurfaceLock) {
+                if (!started || paused || virtualDisplay !== display) return null
+                display.surface = imageReader.surface
+            }
+
+            val captured = latch.await(
+                SCREENSHOT_TIMEOUT_MS,
+                TimeUnit.MILLISECONDS,
+            )
+            restoreEncoderSurface()
 
             if (!captured) return null
+
             val imageBitmap = bitmap ?: return null
             try {
                 saveScreenshotBitmap(imageBitmap)
@@ -335,9 +371,10 @@ class ScreenRecorderEngine(
                 imageBitmap.recycle()
             }
         } catch (_: Throwable) {
-            runCatching { display.surface = encoderSurface }
+            restoreEncoderSurface()
             null
         } finally {
+            restoreEncoderSurface()
             imageReader.setOnImageAvailableListener(null, null)
             imageReader.close()
             handlerThread.quitSafely()
@@ -418,8 +455,10 @@ class ScreenRecorderEngine(
         var stoppedCleanly = true
 
         try {
-            runCatching { activeDisplay?.release() }
-                .onFailure { stoppedCleanly = false }
+            synchronized(captureSurfaceLock) {
+                runCatching { activeDisplay?.release() }
+                    .onFailure { stoppedCleanly = false }
+            }
 
             val signaled = runCatching {
                 activeEncoder?.signalEndOfInputStream()
@@ -498,7 +537,9 @@ class ScreenRecorderEngine(
         pauseStartedNs = 0L
         abortDrain = true
 
-        runCatching { activeDisplay?.release() }
+        synchronized(captureSurfaceLock) {
+            runCatching { activeDisplay?.release() }
+        }
         runCatching { activeAudio?.abort() }
 
         try {
@@ -1181,7 +1222,7 @@ class ScreenRecorderEngine(
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 8_000L
         private const val DRAIN_ABORT_JOIN_TIMEOUT_MS = 1_500L
-        private const val SCREENSHOT_TIMEOUT_MS = 1_500L
+        private const val SCREENSHOT_TIMEOUT_MS = 1_000L
         private const val MAX_PENDING_BYTES = 16 * 1024 * 1024
     }
 }
