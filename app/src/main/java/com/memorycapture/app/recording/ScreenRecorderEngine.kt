@@ -286,7 +286,7 @@ class ScreenRecorderEngine(
             width,
             height,
             PixelFormat.RGBA_8888,
-            2,
+            1,
         )
         val handlerThread = HandlerThread("MemoryCapture-Screenshot").apply { start() }
         val handler = Handler(handlerThread.looper)
@@ -296,6 +296,8 @@ class ScreenRecorderEngine(
         imageReader.setOnImageAvailableListener({ reader ->
             val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
             try {
+                runCatching { display.surface = encoderSurface }
+
                 val plane = image.planes.firstOrNull() ?: return@setOnImageAvailableListener
                 val buffer = plane.buffer
                 val pixelStride = plane.pixelStride
@@ -325,7 +327,6 @@ class ScreenRecorderEngine(
         return try {
             display.surface = imageReader.surface
             val captured = latch.await(SCREENSHOT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            display.surface = encoderSurface
 
             if (!captured) return null
             val imageBitmap = bitmap ?: return null
@@ -335,9 +336,9 @@ class ScreenRecorderEngine(
                 imageBitmap.recycle()
             }
         } catch (_: Throwable) {
-            runCatching { display.surface = encoderSurface }
             null
         } finally {
+            runCatching { display.surface = encoderSurface }
             imageReader.setOnImageAvailableListener(null, null)
             imageReader.close()
             handlerThread.quitSafely()
@@ -1181,7 +1182,7 @@ class ScreenRecorderEngine(
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 8_000L
         private const val DRAIN_ABORT_JOIN_TIMEOUT_MS = 1_500L
-        private const val SCREENSHOT_TIMEOUT_MS = 1_500L
+        private const val SCREENSHOT_TIMEOUT_MS = 750L
         private const val MAX_PENDING_BYTES = 16 * 1024 * 1024
     }
 }
