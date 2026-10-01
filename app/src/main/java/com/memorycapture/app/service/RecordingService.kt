@@ -22,6 +22,7 @@ import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.data.recordings.RecordingHighlightRepository
 import com.memorycapture.app.R
 import com.memorycapture.app.projection.MediaProjectionController
+import com.memorycapture.app.recording.AudioCaptureHealth
 import com.memorycapture.app.recording.GuardianThermalLevel
 import com.memorycapture.app.recording.RecordingError
 import com.memorycapture.app.recording.RecordingGuardianStatus
@@ -48,6 +49,7 @@ class RecordingService : Service() {
     private var floatingControls: FloatingRecordingControls? = null
     private var replayDurationSeconds = InstantReplayDuration.Seconds60.seconds
     private val screenshotInFlight = AtomicBoolean(false)
+    private val replaySaveInFlight = AtomicBoolean(false)
     @Volatile
     private var recoveryCheckpointEnabled = false
     @Volatile
@@ -99,12 +101,20 @@ class RecordingService : Service() {
                 }
             },
             onSaveReplay = {
-                if (RecordingStateStore.state.value is RecordingState.Recording) {
+                if (
+                    RecordingStateStore.state.value is RecordingState.Recording &&
+                    !finalizationInFlight &&
+                    replaySaveInFlight.compareAndSet(false, true)
+                ) {
                     thread(
                         start = true,
                         name = "MemoryCapture-InstantReplay",
                     ) {
-                        recorderEngine.saveInstantReplay(replayDurationSeconds)
+                        try {
+                            recorderEngine.saveInstantReplay(replayDurationSeconds)
+                        } finally {
+                            replaySaveInFlight.set(false)
+                        }
                     }
                 }
             },
@@ -482,6 +492,7 @@ class RecordingService : Service() {
                     ?.let { (it / bytesPerSecond).coerceAtLeast(0L) }
 
             val thermalLevel = currentThermalLevel()
+            val audioHealth = recorderEngine.audioHealth()
             val destinationWarning =
                 destinationAvailableBytes?.let { available ->
                     available <= STORAGE_WARNING_BYTES ||
@@ -513,6 +524,7 @@ class RecordingService : Service() {
                     estimatedRemainingSeconds = remainingSeconds,
                     destinationSpaceKnown = destinationAvailableBytes != null,
                     thermalLevel = thermalLevel,
+                    audioHealth = audioHealth,
                     storageWarning = destinationWarning,
                     workingStorageWarning = workingStorageWarning,
                     thermalWarning = thermalWarning,
@@ -531,10 +543,16 @@ class RecordingService : Service() {
                     ?: false
 
             val thermalDanger = currentThermalStatusRaw() >= THERMAL_EMERGENCY_STATUS
+            val runtimeFailure = recorderEngine.hasFatalRuntimeFailure()
 
             if (
                 !guardianStopInProgress &&
-                (destinationDanger || workspaceDanger || thermalDanger) &&
+                (
+                    destinationDanger ||
+                        workspaceDanger ||
+                        thermalDanger ||
+                        runtimeFailure
+                    ) &&
                 (
                     RecordingStateStore.state.value is RecordingState.Recording ||
                         RecordingStateStore.state.value is RecordingState.Paused
