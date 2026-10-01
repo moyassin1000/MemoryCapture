@@ -9,6 +9,7 @@ class CallVideoRecoveryPolicy(
 ) {
     private var attempts = 0
     private var lastAttemptElapsedMs = 0L
+    private var postCallRecoveryActive = false
 
     fun shouldAttemptRebind(
         callActive: Boolean,
@@ -16,15 +17,21 @@ class CallVideoRecoveryPolicy(
         frameAgeMs: Long,
         nowElapsedMs: Long,
     ): Boolean {
-        if (callJustEnded) {
+        if (callActive) {
+            postCallRecoveryActive = false
+        } else if (callJustEnded) {
             attempts = 0
             lastAttemptElapsedMs = 0L
+            postCallRecoveryActive = true
         }
 
         if (frameAgeMs < healthyFrameAgeMs) {
             reset()
             return false
         }
+
+        val recoveryRelevant = callActive || postCallRecoveryActive
+        if (!recoveryRelevant) return false
 
         val threshold =
             if (callActive) callRebindThresholdMs else postCallRebindThresholdMs
@@ -42,10 +49,22 @@ class CallVideoRecoveryPolicy(
         lastAttemptElapsedMs = nowElapsedMs
     }
 
+    fun hasExhaustedPostCallRecovery(
+        callActive: Boolean,
+        frameAgeMs: Long,
+    ): Boolean =
+        !callActive &&
+            postCallRecoveryActive &&
+            frameAgeMs >= postCallRebindThresholdMs &&
+            attempts >= maxAttempts
+
     fun reset() {
         attempts = 0
         lastAttemptElapsedMs = 0L
+        postCallRecoveryActive = false
     }
 
     fun attemptsForTest(): Int = attempts
+
+    fun postCallRecoveryActiveForTest(): Boolean = postCallRecoveryActive
 }
