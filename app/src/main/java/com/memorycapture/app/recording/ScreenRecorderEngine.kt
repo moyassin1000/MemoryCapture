@@ -83,6 +83,7 @@ class ScreenRecorderEngine(
     private var paused = false
     private var activeCaptureWidth = 0
     private var activeCaptureHeight = 0
+    private var estimatedBytesPerSecond = 0L
 
     fun start(
         projection: MediaProjection,
@@ -221,6 +222,9 @@ class ScreenRecorderEngine(
             virtualDisplay = localDisplay
             activeCaptureWidth = activeProfile.width
             activeCaptureHeight = activeProfile.height
+            estimatedBytesPerSecond =
+                (activeProfile.bitRate.toLong() +
+                    if (audioMode == AudioMode.None) 0L else AUDIO_ESTIMATED_BIT_RATE) / 8L
         } catch (error: Throwable) {
             started = false
             abortDrain = true
@@ -524,6 +528,9 @@ class ScreenRecorderEngine(
     }
 
     fun isActive(): Boolean = started
+
+    fun estimatedOutputBytesPerSecond(): Long =
+        estimatedBytesPerSecond.coerceAtLeast(MIN_ESTIMATED_BYTES_PER_SECOND)
 
     private fun drainVideoEncoder(
         codec: MediaCodec,
@@ -1123,6 +1130,7 @@ class ScreenRecorderEngine(
         replayBuffer = null
         activeCaptureWidth = 0
         activeCaptureHeight = 0
+        estimatedBytesPerSecond = 0L
         drainFailure = null
         abortDrain = false
         paused = false
@@ -1167,6 +1175,8 @@ class ScreenRecorderEngine(
         private const val I_FRAME_INTERVAL_SECONDS = 1
         private const val MIN_VIDEO_BIT_RATE = 2_500_000
         private const val MAX_VIDEO_BIT_RATE = 28_000_000
+        private const val AUDIO_ESTIMATED_BIT_RATE = 128_000L
+        private const val MIN_ESTIMATED_BYTES_PER_SECOND = 256_000L
         private const val MAX_REPLAY_DURATION_US = 180_000_000L
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 8_000L
