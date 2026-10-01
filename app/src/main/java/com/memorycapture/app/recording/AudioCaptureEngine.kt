@@ -264,24 +264,43 @@ class AudioCaptureEngine(
         }
     }
 
-    fun stopAndWait() {
-        if (!running && worker == null) return
+    fun stopAndWait(): Boolean {
+        val activeWorker = worker
+        if (!running && activeWorker == null) return true
+
         running = false
         paused = false
+        restoreSpeakerAssist()
         runCatching { microphoneRecord?.stop() }
         runCatching { playbackRecord?.stop() }
 
         try {
-            worker?.join(STOP_JOIN_TIMEOUT_MS)
+            activeWorker?.join(STOP_JOIN_TIMEOUT_MS)
+
+            if (activeWorker?.isAlive == true) {
+                activeWorker.interrupt()
+                activeWorker.join(STOP_INTERRUPT_JOIN_TIMEOUT_MS)
+            }
+
+            if (activeWorker?.isAlive == true) {
+                runCatching { encoder?.stop() }
+                runCatching { encoder?.release() }
+                activeWorker.interrupt()
+                activeWorker.join(STOP_FORCE_JOIN_TIMEOUT_MS)
+            }
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
 
-        if (worker?.isAlive == true) {
-            worker?.interrupt()
+        val stoppedCleanly = activeWorker?.isAlive != true
+        if (!stoppedCleanly) {
+            failure = failure ?: IllegalStateException(
+                "Audio worker did not stop before muxer finalization.",
+            )
         }
 
         clearReferences()
+        return stoppedCleanly
     }
 
     fun abort() {
@@ -1026,6 +1045,8 @@ class AudioCaptureEngine(
         private const val BYTES_PER_FRAME = 2
         private const val CODEC_TIMEOUT_US = 10_000L
         private const val STOP_JOIN_TIMEOUT_MS = 5_000L
+        private const val STOP_INTERRUPT_JOIN_TIMEOUT_MS = 1_000L
+        private const val STOP_FORCE_JOIN_TIMEOUT_MS = 1_000L
         private const val ABORT_JOIN_TIMEOUT_MS = 1_000L
         private const val PAUSE_POLL_MS = 20L
         private const val AUDIO_IDLE_BACKOFF_MS = 5L
