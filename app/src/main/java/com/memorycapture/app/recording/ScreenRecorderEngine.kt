@@ -100,6 +100,7 @@ class ScreenRecorderEngine(
         customStorageLabel: String? = null,
         audioMode: AudioMode = AudioMode.None,
         preferredMicDeviceId: Int = -1,
+        voipCaptureAssistEnabled: Boolean = false,
         quality: RecordingQuality = RecordingQuality.P1080,
         frameRate: RecordingFrameRate = RecordingFrameRate.Fps30,
         bitratePreset: VideoBitratePreset = VideoBitratePreset.Balanced,
@@ -192,6 +193,7 @@ class ScreenRecorderEngine(
                         projection = projection,
                         mode = audioMode,
                         preferredMicDeviceId = preferredMicDeviceId,
+                        voipCaptureAssistEnabled = voipCaptureAssistEnabled,
                         sink = object : AudioMuxerSink {
                             override fun onAudioFormat(format: MediaFormat) {
                                 registerTrack(
@@ -602,6 +604,10 @@ class ScreenRecorderEngine(
 
     fun audioHealth(): AudioCaptureHealth =
         audioCaptureEngine?.health() ?: AudioCaptureHealth.NotRequested
+
+    fun refreshVoipCaptureStatus(): VoipCaptureStatus =
+        audioCaptureEngine?.refreshVoipCaptureStatus()
+            ?: VoipCaptureStatus.Inactive
 
     fun isVideoDrainStalled(
         nowElapsedMs: Long,
