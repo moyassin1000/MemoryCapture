@@ -325,6 +325,10 @@ class AudioCaptureEngine(
                     waitForEos = false,
                 )
 
+                if (bytes == 0 && (micAvailable || playbackAvailable)) {
+                    Thread.sleep(AUDIO_IDLE_BACKOFF_MS)
+                }
+
                 val noRequestedSourceAvailable = when (mode) {
                     AudioMode.None -> true
                     AudioMode.Microphone -> !micAvailable
@@ -625,6 +629,7 @@ class AudioCaptureEngine(
         private const val STOP_JOIN_TIMEOUT_MS = 5_000L
         private const val ABORT_JOIN_TIMEOUT_MS = 1_000L
         private const val PAUSE_POLL_MS = 20L
+        private const val AUDIO_IDLE_BACKOFF_MS = 5L
         private const val EOS_QUEUE_RETRIES = 100
         private const val EOS_DRAIN_IDLE_LIMIT = 100
     }
