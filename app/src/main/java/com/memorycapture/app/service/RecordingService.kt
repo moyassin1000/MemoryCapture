@@ -267,9 +267,13 @@ class RecordingService : Service() {
             start = true,
             name = "MemoryCapture-FinalizeRecording",
         ) {
-            val saved = recorderEngine.stopAndSave()
+            val saved = runCatching {
+                recorderEngine.stopAndSave()
+            }.getOrNull()
             val recovered = if (saved == null) {
-                recoveryManager.recoverIfNeeded()
+                runCatching {
+                    recoveryManager.recoverIfNeeded()
+                }.getOrNull()
             } else {
                 null
             }
