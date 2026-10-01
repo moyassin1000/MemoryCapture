@@ -102,6 +102,52 @@ class RecordingRecoveryManager(
     }
 
     @Synchronized
+    fun repairActiveSessionArtifacts() {
+        if (!hasInterruptedSession()) {
+            cleanupCheckpointFiles()
+            return
+        }
+
+        val current = checkpointFile
+        val temp = checkpointTempFile
+        val backup = checkpointBackupFile
+
+        if (temp.exists()) {
+            if (isUsableCheckpoint(temp, requireSessionMatch = true)) {
+                commitCheckpoint()
+            } else {
+                runCatching { temp.delete() }
+            }
+        }
+
+        val currentUsable =
+            isUsableCheckpoint(current, requireSessionMatch = true)
+        val backupUsable =
+            isUsableCheckpoint(backup, requireSessionMatch = true)
+
+        when {
+            currentUsable -> {
+                if (
+                    backup.exists() &&
+                    (!backupUsable || backup.lastModified() <= current.lastModified())
+                ) {
+                    runCatching { backup.delete() }
+                }
+            }
+
+            backupUsable -> {
+                runCatching { current.delete() }
+                .onSuccess { runCatching { backup.renameTo(current) } }
+            }
+
+            else -> {
+                runCatching { current.delete() }
+                runCatching { backup.delete() }
+            }
+        }
+    }
+
+    @Synchronized
     fun recoverIfNeeded(): RecoveredRecording? {
         if (!hasInterruptedSession()) {
             cleanupCheckpointFiles()
