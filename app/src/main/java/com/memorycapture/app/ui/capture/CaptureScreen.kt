@@ -313,7 +313,9 @@ fun CaptureScreen(
                                 (
                                     guardianStatus.audioHealth != AudioCaptureHealth.Healthy &&
                                         guardianStatus.audioHealth != AudioCaptureHealth.NotRequested
-                                    ),
+                                    ) ||
+                                guardianStatus.voipStatus == VoipCaptureStatus.SilencedBySystem ||
+                                guardianStatus.voipStatus == VoipCaptureStatus.NoMicrophonePath,
                         )
                     }
                 }
