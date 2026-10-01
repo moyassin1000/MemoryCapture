@@ -81,6 +81,9 @@ class AudioCaptureEngine(
     @Volatile
     private var activeMicSource = MediaRecorder.AudioSource.MIC
 
+    @Volatile
+    private var accessibilityAssistEnabled = false
+
     private var speakerAssistApplied = false
     private var previousCommunicationDeviceId: Int? = null
     private var legacySpeakerWasOn = false
@@ -191,6 +194,8 @@ class AudioCaptureEngine(
         voipAssistEnabled = voipCaptureAssistEnabled
         callMicSilencedBySystem = false
         activeMicSource = MediaRecorder.AudioSource.MIC
+        accessibilityAssistEnabled =
+            CallCaptureCompatibility.isAccessibilityAssistEnabled(context)
         previousCommunicationDeviceId = null
         lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
         paused = false
@@ -318,9 +323,16 @@ class AudioCaptureEngine(
                         lastSpeakerAssistAttemptElapsedMs = nowElapsedMs
                         applySpeakerAssist()
                     }
+                    voipStatus = when {
+                        callMicSilencedBySystem -> VoipCaptureStatus.SilencedBySystem
+                        microphoneRecord == null -> VoipCaptureStatus.NoMicrophonePath
+                        speakerAssistApplied -> VoipCaptureStatus.SpeakerAssistActive
+                        else -> VoipCaptureStatus.CallDetected
+                    }
                 } else if (lastCommunicationActive) {
                     restoreSpeakerAssist()
                     callMicSilencedBySystem = false
+                    voipStatus = VoipCaptureStatus.Inactive
                 }
                 lastCommunicationActive = communicationActive
 
@@ -339,6 +351,7 @@ class AudioCaptureEngine(
                     if (
                         communicationActive &&
                         silenced &&
+                        accessibilityAssistEnabled &&
                         micSourceIndex < CALL_MIC_AUDIO_SOURCES.lastIndex
                     ) {
                         val nextIndex = micSourceIndex + 1
@@ -367,7 +380,10 @@ class AudioCaptureEngine(
                         CALL_MIC_RECOVERY_INTERVAL_MS
                 ) {
                     lastMicRecoveryAttemptElapsedMs = nowElapsedMs
-                    val targetIndex = if (communicationActive) {
+                    val targetIndex = if (
+                        communicationActive &&
+                        accessibilityAssistEnabled
+                    ) {
                         (micSourceIndex + 1)
                             .coerceAtMost(CALL_MIC_AUDIO_SOURCES.lastIndex)
                     } else {
