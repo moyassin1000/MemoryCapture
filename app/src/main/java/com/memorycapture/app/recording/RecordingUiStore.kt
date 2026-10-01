@@ -112,6 +112,7 @@ data class RecordingGuardianStatus(
     val estimatedRemainingSeconds: Long? = null,
     val destinationSpaceKnown: Boolean = true,
     val thermalLevel: GuardianThermalLevel = GuardianThermalLevel.Normal,
+    val audioHealth: AudioCaptureHealth = AudioCaptureHealth.NotRequested,
     val storageWarning: Boolean = false,
     val workingStorageWarning: Boolean = false,
     val thermalWarning: Boolean = false,
