@@ -32,8 +32,10 @@ import com.memorycapture.app.recording.RecordingStateStore
 import com.memorycapture.app.recording.SavedRecordingStore
 import com.memorycapture.app.service.RecordingService
 import com.memorycapture.app.ui.theme.MemoryCaptureTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
     private val projectionManager by lazy {
@@ -91,7 +93,9 @@ class MainActivity : AppCompatActivity() {
         runCatching { ProBillingManager.initialize(applicationContext) }
 
         lifecycleScope.launch {
-            val recovered = recoveryManager.recoverIfNeeded()
+            val recovered = withContext(Dispatchers.IO) {
+                recoveryManager.recoverIfNeeded()
+            }
             if (recovered != null) {
                 SavedRecordingStore.setSaved(
                     displayName = recovered.displayName,
