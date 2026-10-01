@@ -605,13 +605,15 @@ class ScreenRecorderEngine(
             started && drainThread != null && drainThread?.isAlive == false
         if (videoThreadDead) return true
 
-        val audioFailedBeforeTrackReady =
-            audioCaptureEngine?.failure != null &&
+        val audioEngine = audioCaptureEngine
+        val audioStoppedBeforeTrackReady =
+            audioEngine != null &&
+                !audioEngine.isRunning() &&
                 synchronized(muxerLock) {
                     expectedTrackCount > 1 && audioTrackIndex < 0
                 }
 
-        return audioFailedBeforeTrackReady
+        return audioStoppedBeforeTrackReady
     }
 
     fun estimatedOutputBytesPerSecond(): Long =
