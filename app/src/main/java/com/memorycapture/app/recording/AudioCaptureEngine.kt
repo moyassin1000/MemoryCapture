@@ -331,13 +331,23 @@ class AudioCaptureEngine(
                     AudioMode.None -> 0
                     AudioMode.Microphone -> micBytes
                     AudioMode.DeviceAudio -> playbackBytes
-                    AudioMode.DeviceAndMic -> mixPcm16(
-                        micBuffer = micBuffer,
-                        micBytes = micBytes,
-                        playbackBuffer = playbackBuffer,
-                        playbackBytes = playbackBytes,
-                        out = mixedBuffer,
-                    )
+                    AudioMode.DeviceAndMic -> {
+                        if (isCommunicationActive()) {
+                            copyPcm16(
+                                source = micBuffer,
+                                byteCount = micBytes,
+                                out = mixedBuffer,
+                            )
+                        } else {
+                            mixPcm16(
+                                micBuffer = micBuffer,
+                                micBytes = micBytes,
+                                playbackBuffer = playbackBuffer,
+                                playbackBytes = playbackBytes,
+                                out = mixedBuffer,
+                            )
+                        }
+                    }
                 }
 
                 if (bytes > 0) {
@@ -546,9 +556,7 @@ class AudioCaptureEngine(
     fun health(): AudioCaptureHealth = runtimeHealth
 
     fun refreshVoipCaptureStatus(): VoipCaptureStatus {
-        val communicationActive =
-            audioManager.mode == AudioManager.MODE_IN_COMMUNICATION ||
-                audioManager.mode == AudioManager.MODE_IN_CALL
+        val communicationActive = isCommunicationActive()
 
         if (!communicationActive) {
             restoreSpeakerAssist()
@@ -596,6 +604,21 @@ class AudioCaptureEngine(
         runtimeHealth = AudioCaptureHealth.AllAudioLost
         failure = failure ?: IllegalStateException("Audio capture stalled.")
         abort()
+    }
+
+    private fun isCommunicationActive(): Boolean =
+        audioManager.mode == AudioManager.MODE_IN_COMMUNICATION ||
+            audioManager.mode == AudioManager.MODE_IN_CALL
+
+    private fun copyPcm16(
+        source: ByteArray,
+        byteCount: Int,
+        out: ByteArray,
+    ): Int {
+        val bytes = byteCount.coerceAtLeast(0).and(-2)
+        if (bytes <= 0) return 0
+        source.copyInto(out, endIndex = bytes)
+        return bytes
     }
 
     private fun isMicrophoneSilencedBySystem(record: AudioRecord): Boolean {
