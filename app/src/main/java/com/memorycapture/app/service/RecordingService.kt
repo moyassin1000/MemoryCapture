@@ -10,7 +10,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
-import android.os.StatFs
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -29,6 +28,7 @@ import com.memorycapture.app.recording.RecordingGuardianStatus
 import com.memorycapture.app.recording.RecordingGuardianStore
 import com.memorycapture.app.recording.RecordingRecoveryManager
 import com.memorycapture.app.recording.RecordingSessionStore
+import com.memorycapture.app.recording.RecordingStorageSpaceResolver
 import com.memorycapture.app.recording.RecordingState
 import com.memorycapture.app.recording.RecordingStateStore
 import com.memorycapture.app.recording.SavedRecording
@@ -42,6 +42,7 @@ class RecordingService : Service() {
     private lateinit var recorderEngine: ScreenRecorderEngine
     private lateinit var highlightRepository: RecordingHighlightRepository
     private lateinit var recoveryManager: RecordingRecoveryManager
+    private lateinit var storageSpaceResolver: RecordingStorageSpaceResolver
     private val recoveryHandler = Handler(Looper.getMainLooper())
     private val guardianHandler = Handler(Looper.getMainLooper())
     private var floatingControls: FloatingRecordingControls? = null
@@ -51,7 +52,7 @@ class RecordingService : Service() {
     private var recoveryCheckpointEnabled = false
     @Volatile
     private var recoveryCheckpointInFlight = false
-    private var storageGuardianEnabled = true
+    private var recordingTreeUri: String? = null
     private var guardianStopInProgress = false
     @Volatile
     private var finalizationInFlight = false
@@ -64,6 +65,7 @@ class RecordingService : Service() {
         recorderEngine = ScreenRecorderEngine(this)
         highlightRepository = RecordingHighlightRepository(applicationContext)
         recoveryManager = RecordingRecoveryManager(applicationContext)
+        storageSpaceResolver = RecordingStorageSpaceResolver(applicationContext)
         floatingControls = FloatingRecordingControls(
             context = this,
             onPauseResume = {
@@ -163,7 +165,7 @@ class RecordingService : Service() {
             )
         }.getOrDefault(VideoBitratePreset.Balanced)
 
-        storageGuardianEnabled = intent.getStringExtra(EXTRA_STORAGE_TREE_URI).isNullOrBlank()
+        recordingTreeUri = intent.getStringExtra(EXTRA_STORAGE_TREE_URI)
 
         replayDurationSeconds = runCatching {
             InstantReplayDuration.valueOf(
@@ -466,52 +468,70 @@ class RecordingService : Service() {
             }
 
             val bytesPerSecond = recorderEngine.estimatedOutputBytesPerSecond()
-            val availableBytes = if (storageGuardianEnabled) {
-                availableStorageBytes()
-            } else {
-                0L
-            }
+            val destinationAvailableBytes =
+                storageSpaceResolver.recordingDestinationAvailableBytes(recordingTreeUri)
+            val workingAvailableBytes =
+                storageSpaceResolver.workingStorageAvailableBytes()
+
             val remainingSeconds =
-                if (storageGuardianEnabled && bytesPerSecond > 0L) {
-                    (availableBytes / bytesPerSecond).coerceAtLeast(0L)
-                } else {
-                    null
-                }
+                destinationAvailableBytes
+                    ?.takeIf { bytesPerSecond > 0L }
+                    ?.let { (it / bytesPerSecond).coerceAtLeast(0L) }
 
             val thermalLevel = currentThermalLevel()
-            val storageWarning =
-                storageGuardianEnabled &&
-                    (
-                        availableBytes <= STORAGE_WARNING_BYTES ||
-                            (remainingSeconds != null &&
-                                remainingSeconds <= STORAGE_WARNING_SECONDS)
-                    )
+            val destinationWarning =
+                destinationAvailableBytes?.let { available ->
+                    available <= STORAGE_WARNING_BYTES ||
+                        (remainingSeconds != null &&
+                            remainingSeconds <= STORAGE_WARNING_SECONDS)
+                } ?: false
+
+            val workspaceWarningThreshold = maxOf(
+                WORKSPACE_WARNING_BYTES,
+                bytesPerSecond * WORKSPACE_WARNING_SECONDS,
+            )
+            val workspaceStopThreshold = maxOf(
+                WORKSPACE_STOP_BYTES,
+                bytesPerSecond * WORKSPACE_STOP_SECONDS,
+            )
+
+            val workingStorageWarning =
+                workingAvailableBytes?.let { it <= workspaceWarningThreshold }
+                    ?: false
+
             val thermalWarning =
                 thermalLevel == GuardianThermalLevel.Hot ||
                     thermalLevel == GuardianThermalLevel.Critical
 
             RecordingGuardianStore.update(
                 RecordingGuardianStatus(
-                    availableBytes = availableBytes,
+                    destinationAvailableBytes = destinationAvailableBytes,
+                    workingAvailableBytes = workingAvailableBytes,
                     estimatedRemainingSeconds = remainingSeconds,
+                    destinationSpaceKnown = destinationAvailableBytes != null,
                     thermalLevel = thermalLevel,
-                    storageWarning = storageWarning,
+                    storageWarning = destinationWarning,
+                    workingStorageWarning = workingStorageWarning,
                     thermalWarning = thermalWarning,
                 ),
             )
 
-            val storageDanger =
-                storageGuardianEnabled &&
-                    (
-                        availableBytes <= STORAGE_STOP_BYTES ||
-                            (remainingSeconds != null &&
-                                remainingSeconds <= STORAGE_STOP_SECONDS)
-                    )
+            val destinationDanger =
+                destinationAvailableBytes?.let { available ->
+                    available <= STORAGE_STOP_BYTES ||
+                        (remainingSeconds != null &&
+                            remainingSeconds <= STORAGE_STOP_SECONDS)
+                } ?: false
+
+            val workspaceDanger =
+                workingAvailableBytes?.let { it <= workspaceStopThreshold }
+                    ?: false
+
             val thermalDanger = currentThermalStatusRaw() >= THERMAL_EMERGENCY_STATUS
 
             if (
                 !guardianStopInProgress &&
-                (storageDanger || thermalDanger) &&
+                (destinationDanger || workspaceDanger || thermalDanger) &&
                 (
                     RecordingStateStore.state.value is RecordingState.Recording ||
                         RecordingStateStore.state.value is RecordingState.Paused
@@ -534,13 +554,6 @@ class RecordingService : Service() {
     private fun cancelGuardian() {
         guardianHandler.removeCallbacks(guardianRunnable)
     }
-
-    private fun availableStorageBytes(): Long =
-        runCatching {
-            val path = getExternalFilesDir(null)?.absolutePath
-                ?: filesDir.absolutePath
-            StatFs(path).availableBytes
-        }.getOrDefault(0L)
 
     private fun currentThermalStatusRaw(): Int =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -716,6 +729,10 @@ class RecordingService : Service() {
         private const val STORAGE_STOP_BYTES = 120L * 1024L * 1024L
         private const val STORAGE_WARNING_SECONDS = 180L
         private const val STORAGE_STOP_SECONDS = 45L
+        private const val WORKSPACE_WARNING_BYTES = 600L * 1024L * 1024L
+        private const val WORKSPACE_STOP_BYTES = 256L * 1024L * 1024L
+        private const val WORKSPACE_WARNING_SECONDS = 360L
+        private const val WORKSPACE_STOP_SECONDS = 180L
         private const val THERMAL_EMERGENCY_STATUS = 5
     }
 }
