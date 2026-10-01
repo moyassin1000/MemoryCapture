@@ -267,6 +267,7 @@ class AudioCaptureEngine(
                     if (read < 0) {
                         micAvailable = false
                         updateRuntimeHealth(
+                            mode = mode,
                             micAvailable = false,
                             playbackAvailable = playbackAvailable,
                         )
@@ -283,6 +284,7 @@ class AudioCaptureEngine(
                     if (read < 0) {
                         playbackAvailable = false
                         updateRuntimeHealth(
+                            mode = mode,
                             micAvailable = micAvailable,
                             playbackAvailable = false,
                         )
@@ -476,14 +478,33 @@ class AudioCaptureEngine(
         )
 
     private fun updateRuntimeHealth(
+        mode: AudioMode,
         micAvailable: Boolean,
         playbackAvailable: Boolean,
     ) {
-        runtimeHealth = when {
-            !micAvailable && !playbackAvailable -> AudioCaptureHealth.AllAudioLost
-            !micAvailable -> AudioCaptureHealth.MicrophoneLost
-            !playbackAvailable -> AudioCaptureHealth.DeviceAudioLost
-            else -> AudioCaptureHealth.Healthy
+        runtimeHealth = when (mode) {
+            AudioMode.None -> AudioCaptureHealth.NotRequested
+            AudioMode.Microphone -> {
+                if (micAvailable) {
+                    AudioCaptureHealth.Healthy
+                } else {
+                    AudioCaptureHealth.MicrophoneLost
+                }
+            }
+            AudioMode.DeviceAudio -> {
+                if (playbackAvailable) {
+                    AudioCaptureHealth.Healthy
+                } else {
+                    AudioCaptureHealth.DeviceAudioLost
+                }
+            }
+            AudioMode.DeviceAndMic -> when {
+                !micAvailable && !playbackAvailable ->
+                    AudioCaptureHealth.AllAudioLost
+                !micAvailable -> AudioCaptureHealth.MicrophoneLost
+                !playbackAvailable -> AudioCaptureHealth.DeviceAudioLost
+                else -> AudioCaptureHealth.Healthy
+            }
         }
     }
 
