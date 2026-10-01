@@ -37,13 +37,11 @@ class RecordingStorageSpaceResolver(
             ?.let(::statAvailableBytes)
     }
 
-    fun workingStorageAvailableBytes(): Long {
+    fun workingStorageAvailableBytes(): Long? {
         val cacheBytes = statAvailableBytes(context.cacheDir)
         val filesBytes = statAvailableBytes(context.filesDir)
 
-        return listOfNotNull(cacheBytes, filesBytes)
-            .minOrNull()
-            ?: 0L
+        return listOfNotNull(cacheBytes, filesBytes).minOrNull()
     }
 
     private fun resolveExternalVolumeDirectory(volumeId: String): File? {
