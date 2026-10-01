@@ -114,6 +114,10 @@ class MainActivity : AppCompatActivity() {
                         location = recovered.locationLabel,
                     )
                     RecordingStateStore.transition(RecordingState.Completed)
+                } else if (recoveryManager.hasInterruptedSession()) {
+                    RecordingStateStore.forceError(
+                        RecordingError.RecordingInterrupted,
+                    )
                 }
             }
         }
