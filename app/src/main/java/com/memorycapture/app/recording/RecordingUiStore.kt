@@ -97,3 +97,32 @@ object RecordingSessionStore {
 
     private const val MIN_HIGHLIGHT_GAP_MS = 750L
 }
+
+
+enum class GuardianThermalLevel {
+    Normal,
+    Warm,
+    Hot,
+    Critical,
+}
+
+data class RecordingGuardianStatus(
+    val availableBytes: Long = 0L,
+    val estimatedRemainingSeconds: Long? = null,
+    val thermalLevel: GuardianThermalLevel = GuardianThermalLevel.Normal,
+    val storageWarning: Boolean = false,
+    val thermalWarning: Boolean = false,
+)
+
+object RecordingGuardianStore {
+    private val mutableStatus = MutableStateFlow(RecordingGuardianStatus())
+    val status: StateFlow<RecordingGuardianStatus> = mutableStatus.asStateFlow()
+
+    fun update(status: RecordingGuardianStatus) {
+        mutableStatus.value = status
+    }
+
+    fun clear() {
+        mutableStatus.value = RecordingGuardianStatus()
+    }
+}
