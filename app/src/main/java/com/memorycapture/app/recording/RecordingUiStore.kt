@@ -108,7 +108,7 @@ enum class GuardianThermalLevel {
 
 data class RecordingGuardianStatus(
     val destinationAvailableBytes: Long? = null,
-    val workingAvailableBytes: Long = 0L,
+    val workingAvailableBytes: Long? = null,
     val estimatedRemainingSeconds: Long? = null,
     val destinationSpaceKnown: Boolean = true,
     val thermalLevel: GuardianThermalLevel = GuardianThermalLevel.Normal,
