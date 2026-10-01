@@ -1,5 +1,6 @@
 package com.memorycapture.app.service
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -734,6 +735,7 @@ class RecordingService : Service() {
         }
     }
 
+    @SuppressLint("WakelockTimeout")
     private fun acquireRecordingWakeLock() {
         val existing = recordingWakeLock
         if (existing?.isHeld == true) return
