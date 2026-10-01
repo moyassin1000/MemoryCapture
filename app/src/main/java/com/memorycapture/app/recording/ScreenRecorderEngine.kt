@@ -647,8 +647,6 @@ class ScreenRecorderEngine(
                     putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
                 }
                 activeEncoder.setParameters(requestSyncFrame)
-
-                lastVideoSampleElapsedMs = SystemClock.elapsedRealtime()
                 true
             }.getOrDefault(false)
         }
