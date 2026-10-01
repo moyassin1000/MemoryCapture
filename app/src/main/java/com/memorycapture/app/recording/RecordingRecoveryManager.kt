@@ -112,6 +112,8 @@ class RecordingRecoveryManager(
         val temp = checkpointTempFile
         val backup = checkpointBackupFile
 
+        if (!temp.exists() && !backup.exists()) return
+
         if (temp.exists()) {
             if (isUsableCheckpoint(temp, requireSessionMatch = true)) {
                 commitCheckpoint()
