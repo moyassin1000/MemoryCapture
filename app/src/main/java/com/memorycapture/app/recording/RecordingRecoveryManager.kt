@@ -108,13 +108,22 @@ class RecordingRecoveryManager(
             return null
         }
 
-        val file = listOf(
+        val candidates = listOf(
             checkpointFile,
             checkpointBackupFile,
             checkpointTempFile,
         )
-            .filter { isUsableCheckpoint(it, requireSessionMatch = true) }
-            .maxByOrNull { it.lastModified() }
+        val usable = candidates.filter {
+            isUsableCheckpoint(it, requireSessionMatch = true)
+        }
+
+        candidates
+            .filter { it.exists() && it !in usable }
+            .forEach { invalid ->
+                runCatching { invalid.delete() }
+            }
+
+        val file = usable.maxByOrNull { it.lastModified() }
 
         if (file == null) {
             discardRecoveryState()
@@ -238,7 +247,7 @@ class RecordingRecoveryManager(
         val directory = File(root, "MemoryCapture/Recovered").apply { mkdirs() }
         val target = File(directory, displayName)
 
-        return runCatching {
+        val recovered = runCatching {
             file.copyTo(target, overwrite = false)
             MediaScannerConnection.scanFile(
                 context,
@@ -252,6 +261,11 @@ class RecordingRecoveryManager(
                 locationLabel = target.parentFile?.absolutePath ?: target.absolutePath,
             )
         }.getOrNull()
+
+        if (recovered == null) {
+            runCatching { target.delete() }
+        }
+        return recovered
     }
 
     companion object {
