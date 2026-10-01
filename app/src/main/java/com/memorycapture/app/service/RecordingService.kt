@@ -34,6 +34,7 @@ import com.memorycapture.app.recording.RecordingStateStore
 import com.memorycapture.app.recording.SavedRecording
 import com.memorycapture.app.recording.SavedRecordingStore
 import com.memorycapture.app.recording.ScreenRecorderEngine
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 class RecordingService : Service() {
@@ -45,6 +46,7 @@ class RecordingService : Service() {
     private val guardianHandler = Handler(Looper.getMainLooper())
     private var floatingControls: FloatingRecordingControls? = null
     private var replayDurationSeconds = InstantReplayDuration.Seconds60.seconds
+    private val screenshotInFlight = AtomicBoolean(false)
     @Volatile
     private var recoveryCheckpointEnabled = false
     @Volatile
@@ -72,12 +74,20 @@ class RecordingService : Service() {
                 }
             },
             onScreenshot = {
-                if (RecordingStateStore.state.value is RecordingState.Recording) {
+                if (
+                    RecordingStateStore.state.value is RecordingState.Recording &&
+                    !finalizationInFlight &&
+                    screenshotInFlight.compareAndSet(false, true)
+                ) {
                     thread(
                         start = true,
                         name = "MemoryCapture-ScreenshotAction",
                     ) {
-                        recorderEngine.captureScreenshot()
+                        try {
+                            recorderEngine.captureScreenshot()
+                        } finally {
+                            screenshotInFlight.set(false)
+                        }
                     }
                 }
             },
