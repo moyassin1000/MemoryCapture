@@ -614,6 +614,10 @@ class ScreenRecorderEngine(
         audioCaptureEngine?.refreshVoipCaptureStatus()
             ?: VoipCaptureStatus.Inactive
 
+    fun currentVoipCaptureStatus(): VoipCaptureStatus =
+        audioCaptureEngine?.voipCaptureStatus()
+            ?: VoipCaptureStatus.Inactive
+
     fun isVideoDrainStalled(
         nowElapsedMs: Long,
         thresholdMs: Long,
