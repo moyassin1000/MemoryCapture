@@ -19,6 +19,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.view.Surface
 import androidx.documentfile.provider.DocumentFile
@@ -72,6 +73,9 @@ class ScreenRecorderEngine(
 
     @Volatile
     private var abortDrain = false
+
+    @Volatile
+    private var lastVideoDrainHeartbeatElapsedMs = 0L
 
     private var videoTrackIndex = -1
     private var audioTrackIndex = -1
@@ -171,6 +175,7 @@ class ScreenRecorderEngine(
             outputHandle = output
             drainFailure = null
             abortDrain = false
+            lastVideoDrainHeartbeatElapsedMs = SystemClock.elapsedRealtime()
             paused = false
             started = true
 
@@ -598,6 +603,29 @@ class ScreenRecorderEngine(
     fun audioHealth(): AudioCaptureHealth =
         audioCaptureEngine?.health() ?: AudioCaptureHealth.NotRequested
 
+    fun isVideoDrainStalled(
+        nowElapsedMs: Long,
+        thresholdMs: Long,
+    ): Boolean =
+        started &&
+            !paused &&
+            drainThread?.isAlive == true &&
+            lastVideoDrainHeartbeatElapsedMs > 0L &&
+            nowElapsedMs - lastVideoDrainHeartbeatElapsedMs >= thresholdMs
+
+    fun isAudioCaptureStalled(
+        nowElapsedMs: Long,
+        thresholdMs: Long,
+    ): Boolean =
+        audioCaptureEngine?.isStalled(
+            nowElapsedMs = nowElapsedMs,
+            thresholdMs = thresholdMs,
+        ) == true
+
+    fun degradeStalledAudio() {
+        audioCaptureEngine?.stopAfterStall()
+    }
+
     fun hasFatalRuntimeFailure(): Boolean {
         if (drainFailure != null) return true
 
@@ -616,6 +644,31 @@ class ScreenRecorderEngine(
         return audioStoppedBeforeTrackReady
     }
 
+    fun performLongSessionMaintenance(
+        cleanReplayExports: Boolean,
+    ) {
+        replayBuffer?.maintenance()
+
+        if (cleanReplayExports) {
+            val directory = File(context.cacheDir, "instant_replay_exports")
+            val cutoff = System.currentTimeMillis() - STALE_REPLAY_EXPORT_MS
+
+            directory.listFiles()?.forEach { file ->
+                if (
+                    file.isFile &&
+                    file.lastModified() > 0L &&
+                file.lastModified() < cutoff
+                ) {
+                    runCatching { file.delete() }
+                }
+            }
+
+            if (directory.listFiles()?.isEmpty() == true) {
+                runCatching { directory.delete() }
+            }
+        }
+    }
+
     fun estimatedOutputBytesPerSecond(): Long =
         estimatedBytesPerSecond.coerceAtLeast(MIN_ESTIMATED_BYTES_PER_SECOND)
 
@@ -627,11 +680,16 @@ class ScreenRecorderEngine(
 
         try {
             while (!abortDrain) {
+                lastVideoDrainHeartbeatElapsedMs = SystemClock.elapsedRealtime()
+
                 when (val outputBufferIndex = codec.dequeueOutputBuffer(
                     bufferInfo,
                     DEQUEUE_TIMEOUT_US,
                 )) {
-                    MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                    MediaCodec.INFO_TRY_AGAIN_LATER -> {
+                        lastVideoDrainHeartbeatElapsedMs =
+                            SystemClock.elapsedRealtime()
+                    }
 
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         registerTrack(
@@ -1265,6 +1323,7 @@ class ScreenRecorderEngine(
         private const val AUDIO_ESTIMATED_BIT_RATE = 128_000L
         private const val MIN_ESTIMATED_BYTES_PER_SECOND = 256_000L
         private const val MAX_REPLAY_DURATION_US = 180_000_000L
+        private const val STALE_REPLAY_EXPORT_MS = 15L * 60L * 1_000L
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 8_000L
         private const val DRAIN_ABORT_JOIN_TIMEOUT_MS = 1_500L

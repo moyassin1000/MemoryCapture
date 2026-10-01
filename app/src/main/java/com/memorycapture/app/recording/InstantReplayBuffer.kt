@@ -130,6 +130,30 @@ class InstantReplayBuffer(
     }
 
     @Synchronized
+    fun maintenance() {
+        if (disposed) return
+
+        prune()
+
+        val activePaths = buildSet {
+            current?.file?.absolutePath?.let(::add)
+            segments.forEach { add(it.file.absolutePath) }
+            addAll(pinnedFiles)
+        }
+        val cutoff = System.currentTimeMillis() - ORPHAN_SEGMENT_GRACE_MS
+
+        directory.listFiles()?.forEach { file ->
+            if (
+                file.absolutePath !in activePaths &&
+                file.lastModified() > 0L &&
+                file.lastModified() < cutoff
+            ) {
+                runCatching { file.delete() }
+            }
+        }
+    }
+
+    @Synchronized
     fun clear() {
         disposed = true
 
@@ -457,5 +481,6 @@ class InstantReplayBuffer(
         private const val SEGMENT_DURATION_US = 5_000_000L
         private const val MAX_SAMPLE_BYTES = 16 * 1024 * 1024
         private const val IO_BUFFER_BYTES = 64 * 1024
+        private const val ORPHAN_SEGMENT_GRACE_MS = 60_000L
     }
 }
