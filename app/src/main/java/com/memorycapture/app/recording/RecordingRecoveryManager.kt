@@ -98,8 +98,6 @@ class RecordingRecoveryManager(
     fun recoverIfNeeded(): RecoveredRecording? {
         if (!hasInterruptedSession()) return null
 
-        clearInterruptedFlag()
-
         val file = when {
             checkpointFile.exists() && checkpointFile.length() > MIN_RECOVERY_BYTES ->
                 checkpointFile
@@ -116,6 +114,7 @@ class RecordingRecoveryManager(
 
         val recovered = importRecoveredFile(file)
         if (recovered != null) {
+            clearInterruptedFlag()
             runCatching { checkpointFile.delete() }
             runCatching { checkpointTempFile.delete() }
             runCatching { checkpointBackupFile.delete() }
