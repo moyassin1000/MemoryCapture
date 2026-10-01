@@ -903,7 +903,7 @@ class AudioCaptureEngine(
         preferredMicDeviceId: Int,
         audioSource: Int,
     ): AudioRecord? {
-        if (!running) return current
+        if (!running || paused) return current
 
         runCatching { current?.stop() }
 
@@ -924,12 +924,12 @@ class AudioCaptureEngine(
             null
         }
 
-        if (replacement == null || !running) {
+        if (replacement == null || !running || paused) {
             if (replacement != null) {
                 runCatching { replacement.stop() }
                 runCatching { replacement.release() }
             }
-            if (running) {
+            if (running && !paused) {
                 runCatching { current?.startRecording() }
             }
             microphoneRecord = current
