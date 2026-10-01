@@ -373,13 +373,25 @@ fun CaptureScreen(
                 }
 
                 item {
-                    VoipAssistCard(
+                    UniversalCallAssistCard(
                         enabled = voipCaptureAssistEnabled,
                         controlsEnabled = !active && !busy,
                         onEnabledChange = { enabled ->
                             scope.launch {
                                 preferences.setVoipCaptureAssistEnabled(enabled)
                             }
+                        },
+                    )
+                }
+
+                item {
+                    EnhancedCallCompatibilityCard(
+                        enabled = enhancedCallCompatibilityEnabled,
+                        controlsEnabled = !active && !busy,
+                        onManage = {
+                            context.startActivity(
+                                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+                            )
                         },
                     )
                 }
@@ -649,7 +661,79 @@ private fun formatGuardianRemaining(seconds: Long): String {
 }
 
 @Composable
-private fun VoipAssistCard(
+private fun EnhancedCallCompatibilityCard(
+    enabled: Boolean,
+    controlsEnabled: Boolean,
+    onManage: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(10.dp, MaterialTheme.shapes.large),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Mic,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.enhanced_call_compat_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                )
+                Text(
+                    text = stringResource(R.string.enhanced_call_compat_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(
+                        if (enabled) {
+                            R.string.enhanced_call_compat_enabled
+                        } else {
+                            R.string.enhanced_call_compat_disabled
+                        },
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (enabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                )
+            }
+            OutlinedButton(
+                enabled = controlsEnabled,
+                onClick = onManage,
+            ) {
+                Text(
+                    stringResource(
+                        if (enabled) {
+                            R.string.enhanced_call_compat_manage
+                        } else {
+                            R.string.enhanced_call_compat_enable
+                        },
+                    ),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UniversalCallAssistCard(
     enabled: Boolean,
     controlsEnabled: Boolean,
     onEnabledChange: (Boolean) -> Unit,
