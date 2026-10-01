@@ -332,21 +332,33 @@ class ScreenRecorderEngine(
                     height,
                     Bitmap.Config.ARGB_8888,
                 )
-                padded.copyPixelsFromBuffer(buffer)
 
-                bitmap = if (paddedWidth == width) {
-                    padded
-                } else {
-                    Bitmap.createBitmap(
-                        padded,
-                        0,
-                        0,
-                        width,
-                        height,
-                    ).also {
+                try {
+                    padded.copyPixelsFromBuffer(buffer)
+
+                    bitmap = if (paddedWidth == width) {
+                        padded
+                    } else {
+                        Bitmap.createBitmap(
+                            padded,
+                            0,
+                            0,
+                            width,
+                            height,
+                        )
+                    }
+                } finally {
+                    if (bitmap !== padded && !padded.isRecycled) {
                         padded.recycle()
                     }
                 }
+            } catch (_: Throwable) {
+                bitmap?.let { failed ->
+                    if (!failed.isRecycled) {
+                        failed.recycle()
+                    }
+                }
+                bitmap = null
             } finally {
                 image.close()
                 latch.countDown()
@@ -1225,7 +1237,7 @@ class ScreenRecorderEngine(
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 8_000L
         private const val DRAIN_ABORT_JOIN_TIMEOUT_MS = 1_500L
-        private const val SCREENSHOT_TIMEOUT_MS = 1_000L
+        private const val SCREENSHOT_TIMEOUT_MS = 2_000L
         private const val MAX_PENDING_BYTES = 16 * 1024 * 1024
     }
 }
