@@ -496,7 +496,11 @@ class ScreenRecorderEngine(
             }.isSuccess
             if (!signaled) stoppedCleanly = false
 
-            activeAudio?.stopAndWait()
+            val audioStoppedCleanly = activeAudio?.stopAndWait() ?: true
+            if (!audioStoppedCleanly) {
+                stoppedCleanly = false
+            }
+
             val audioTrackReady = synchronized(muxerLock) {
                 expectedTrackCount == 1 || audioTrackIndex >= 0
             }
