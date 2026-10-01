@@ -47,6 +47,8 @@ class RecordingService : Service() {
     private var replayDurationSeconds = InstantReplayDuration.Seconds60.seconds
     @Volatile
     private var recoveryCheckpointEnabled = false
+    @Volatile
+    private var recoveryCheckpointInFlight = false
     private var storageGuardianEnabled = true
     private var guardianStopInProgress = false
     private var intentionalStop = false
@@ -340,29 +342,59 @@ class RecordingService : Service() {
 
     private val recoveryRunnable = object : Runnable {
         override fun run() {
-            if (recorderEngine.isActive()) {
-                thread(
-                    start = true,
-                    name = "MemoryCapture-RecoveryCheckpoint",
-                ) {
+            if (
+                !recoveryCheckpointEnabled ||
+                !recorderEngine.isActive() ||
+                recoveryCheckpointInFlight
+            ) {
+                return
+            }
+
+            recoveryCheckpointInFlight = true
+
+            thread(
+                start = true,
+                name = "MemoryCapture-RecoveryCheckpoint",
+            ) {
+                try {
                     val written = recorderEngine.writeRecoveryCheckpoint(
                         targetFile = recoveryManager.checkpointTempFile,
                         durationSeconds = RECOVERY_WINDOW_SECONDS,
                     )
+
                     if (written && recoveryCheckpointEnabled) {
                         recoveryManager.commitCheckpoint()
                     } else {
                         runCatching { recoveryManager.checkpointTempFile.delete() }
                     }
+                } finally {
+                    recoveryCheckpointInFlight = false
+
+                    if (
+                        recoveryCheckpointEnabled &&
+                        recorderEngine.isActive()
+                    ) {
+                        recoveryHandler.postDelayed(
+                            recoveryRunnable,
+                            RECOVERY_INTERVAL_MS,
+                        )
+                    }
                 }
-                recoveryHandler.postDelayed(this, RECOVERY_INTERVAL_MS)
             }
         }
     }
 
     private fun scheduleRecoveryCheckpoint() {
         recoveryHandler.removeCallbacks(recoveryRunnable)
-        recoveryHandler.postDelayed(recoveryRunnable, RECOVERY_INTERVAL_MS)
+        if (
+            recoveryCheckpointEnabled &&
+            !recoveryCheckpointInFlight
+        ) {
+            recoveryHandler.postDelayed(
+                recoveryRunnable,
+                RECOVERY_INTERVAL_MS,
+            )
+        }
     }
 
     private fun cancelRecoveryCheckpoint() {
