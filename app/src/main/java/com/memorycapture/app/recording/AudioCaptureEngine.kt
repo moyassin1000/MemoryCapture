@@ -510,6 +510,8 @@ class AudioCaptureEngine(
 
     fun health(): AudioCaptureHealth = runtimeHealth
 
+    fun isRunning(): Boolean = running
+
     private fun mixPcm16(
         micBuffer: ByteArray,
         micBytes: Int,
