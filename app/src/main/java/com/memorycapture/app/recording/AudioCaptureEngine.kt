@@ -943,24 +943,38 @@ class AudioCaptureEngine(
             return bytes
         }
 
-        val bytes = minOf(micBytes, playbackBytes)
+        val bytes = maxOf(micBytes, playbackBytes)
             .coerceAtLeast(0)
             .and(-2)
 
         var index = 0
         while (index < bytes) {
-            val mic = (
-                (micBuffer[index].toInt() and 0xFF) or
-                    (micBuffer[index + 1].toInt() shl 8)
-                ).toShort().toInt()
+            val hasMic = index + 1 < micBytes
+            val hasPlayback = index + 1 < playbackBytes
 
-            val playback = (
-                (playbackBuffer[index].toInt() and 0xFF) or
-                    (playbackBuffer[index + 1].toInt() shl 8)
-                ).toShort().toInt()
+            val mic = if (hasMic) {
+                (
+                    (micBuffer[index].toInt() and 0xFF) or
+                        (micBuffer[index + 1].toInt() shl 8)
+                    ).toShort().toInt()
+            } else {
+                0
+            }
 
-            val mixed = ((mic + playback) / 2)
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+            val playback = if (hasPlayback) {
+                (
+                    (playbackBuffer[index].toInt() and 0xFF) or
+                        (playbackBuffer[index + 1].toInt() shl 8)
+                    ).toShort().toInt()
+            } else {
+                0
+            }
+
+            val mixed = when {
+                hasMic && hasPlayback -> (mic + playback) / 2
+                hasMic -> mic
+                else -> playback
+            }.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
 
             out[index] = (mixed and 0xFF).toByte()
             out[index + 1] = ((mixed shr 8) and 0xFF).toByte()
@@ -1000,14 +1014,22 @@ class AudioCaptureEngine(
         preferredMicDeviceId: Int,
         audioSource: Int,
     ): AudioRecord? {
+        var candidate: AudioRecord? = null
         val replacement = runCatching {
             createMicrophoneRecord(
                 format = format,
                 bufferSize = bufferSize,
                 preferredMicDeviceId = preferredMicDeviceId,
                 audioSource = audioSource,
-            ).also { it.startRecording() }
-        }.getOrNull()
+            ).also {
+                candidate = it
+                it.startRecording()
+            }
+        }.getOrElse {
+            runCatching { candidate?.stop() }
+            runCatching { candidate?.release() }
+            null
+        }
 
         if (replacement == null) {
             microphoneRecord = current
