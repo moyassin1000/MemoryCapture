@@ -275,6 +275,14 @@
     <string name="guardian_audio_microphone_lost">تم فقد اتصال الميكروفون، وسيستمر تسجيل الفيديو.</string>
     <string name="guardian_audio_device_lost">تم فقد صوت الجهاز، وسيستمر تسجيل الفيديو.</string>
     <string name="guardian_audio_all_lost">توقف التقاط الصوت، وسيستمر تسجيل الفيديو.</string>
+    <string name="voip_assist_title">مساعدة تسجيل مكالمات VoIP</string>
+    <string name="voip_assist_body">عند اكتشاف مكالمة Messenger أو تطبيق اتصال مشابه، يحاول MemoryCapture توجيه صوت المكالمة للسماعة الخارجية والتقاطه مع الميكروفون إذا سمح أندرويد بذلك.</string>
+    <string name="guardian_voip_line">المكالمة: %1$s</string>
+    <string name="guardian_voip_inactive">لا توجد مكالمة نشطة</string>
+    <string name="guardian_voip_call_detected">تم اكتشاف مكالمة. التوجيه للسماعة غير مفعل أو لم يتم قبوله.</string>
+    <string name="guardian_voip_speaker_assist">تم تفعيل Speaker Assist. يحاول MemoryCapture التقاط صوت الطرفين صوتيًا.</string>
+    <string name="guardian_voip_silenced">أندرويد حجب ميكروفون MemoryCapture أثناء المكالمة. الفيديو سيستمر لكن صوت المكالمة لن يُلتقط على هذا الجهاز.</string>
+    <string name="guardian_voip_no_mic_path">تم اكتشاف مكالمة لكن وضع التسجيل الحالي لا يستخدم الميكروفون. اختر الميكروفون أو الجهاز + الميكروفون لتجربة التقاط صوت المكالمة.</string>
     <string name="guardian_warning">يوجد خطر على استمرار التسجيل. سيحاول MemoryCapture الحفظ بأمان قبل الوصول لمرحلة الخطر.</string>
     <string name="guardian_unknown">غير متاح</string>
 
