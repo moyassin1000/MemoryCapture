@@ -190,6 +190,11 @@ class RecordingService : Service() {
             ).seconds
         }.getOrDefault(InstantReplayDuration.Seconds60.seconds)
 
+        val voipCaptureAssistEnabled = intent.getBooleanExtra(
+            EXTRA_VOIP_CAPTURE_ASSIST_ENABLED,
+            true,
+        )
+
         startAsForeground(audioMode)
         intentionalStop = false
 
@@ -206,6 +211,7 @@ class RecordingService : Service() {
                     EXTRA_MICROPHONE_DEVICE_ID,
                     -1,
                 ),
+                voipCaptureAssistEnabled = voipCaptureAssistEnabled,
                 quality = recordingQuality,
                 frameRate = recordingFrameRate,
                 bitratePreset = videoBitratePreset,
@@ -503,6 +509,7 @@ class RecordingService : Service() {
 
             val thermalLevel = currentThermalLevel()
             val audioHealth = recorderEngine.audioHealth()
+            val voipStatus = recorderEngine.refreshVoipCaptureStatus()
             val destinationWarning =
                 destinationAvailableBytes?.let { available ->
                     available <= STORAGE_WARNING_BYTES ||
@@ -535,6 +542,7 @@ class RecordingService : Service() {
                     destinationSpaceKnown = destinationAvailableBytes != null,
                     thermalLevel = thermalLevel,
                     audioHealth = audioHealth,
+                    voipStatus = voipStatus,
                     storageWarning = destinationWarning,
                     workingStorageWarning = workingStorageWarning,
                     thermalWarning = thermalWarning,
@@ -795,6 +803,7 @@ class RecordingService : Service() {
         const val EXTRA_RECORDING_FRAME_RATE = "recording_frame_rate"
         const val EXTRA_VIDEO_BITRATE_PRESET = "video_bitrate_preset"
         const val EXTRA_INSTANT_REPLAY_DURATION = "instant_replay_duration"
+        const val EXTRA_VOIP_CAPTURE_ASSIST_ENABLED = "voip_capture_assist_enabled"
         private const val CHANNEL_ID = "recording"
         private const val NOTIFICATION_ID = 1001
         private const val RECOVERY_INTERVAL_MS = 30_000L

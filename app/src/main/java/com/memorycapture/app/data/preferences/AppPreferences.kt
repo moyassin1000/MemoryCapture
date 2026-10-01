@@ -110,6 +110,11 @@ class AppPreferences(
         it[KEY_MICROPHONE_DEVICE_ID] ?: -1
     }
 
+    val voipCaptureAssistEnabled: Flow<Boolean> =
+        context.memoryCaptureDataStore.data.map {
+            it[KEY_VOIP_CAPTURE_ASSIST_ENABLED] ?: true
+        }
+
     val recordingQuality: Flow<RecordingQuality> =
         context.memoryCaptureDataStore.data.map { preferences ->
             runCatching {
@@ -195,6 +200,12 @@ class AppPreferences(
         context.memoryCaptureDataStore.edit { it[KEY_MICROPHONE_DEVICE_ID] = deviceId }
     }
 
+    suspend fun setVoipCaptureAssistEnabled(enabled: Boolean) {
+        context.memoryCaptureDataStore.edit {
+            it[KEY_VOIP_CAPTURE_ASSIST_ENABLED] = enabled
+        }
+    }
+
     suspend fun setRecordingQuality(quality: RecordingQuality) {
         context.memoryCaptureDataStore.edit { it[KEY_RECORDING_QUALITY] = quality.name }
     }
@@ -242,6 +253,8 @@ class AppPreferences(
         private val KEY_PRO_ACCENT = stringPreferencesKey("pro_accent")
         private val KEY_AUDIO_MODE = stringPreferencesKey("audio_mode")
         private val KEY_MICROPHONE_DEVICE_ID = intPreferencesKey("microphone_device_id")
+        private val KEY_VOIP_CAPTURE_ASSIST_ENABLED =
+            booleanPreferencesKey("voip_capture_assist_enabled")
         private val KEY_RECORDING_QUALITY = stringPreferencesKey("recording_quality")
         private val KEY_RECORDING_FRAME_RATE = stringPreferencesKey("recording_frame_rate")
         private val KEY_VIDEO_BITRATE_PRESET = stringPreferencesKey("video_bitrate_preset")

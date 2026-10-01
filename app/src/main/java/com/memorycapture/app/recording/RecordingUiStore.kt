@@ -113,6 +113,7 @@ data class RecordingGuardianStatus(
     val destinationSpaceKnown: Boolean = true,
     val thermalLevel: GuardianThermalLevel = GuardianThermalLevel.Normal,
     val audioHealth: AudioCaptureHealth = AudioCaptureHealth.NotRequested,
+    val voipStatus: VoipCaptureStatus = VoipCaptureStatus.Inactive,
     val storageWarning: Boolean = false,
     val workingStorageWarning: Boolean = false,
     val thermalWarning: Boolean = false,
