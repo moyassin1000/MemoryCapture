@@ -51,6 +51,8 @@ class RecordingService : Service() {
     private var recoveryCheckpointInFlight = false
     private var storageGuardianEnabled = true
     private var guardianStopInProgress = false
+    @Volatile
+    private var stopSaveInProgress = false
     private var intentionalStop = false
 
     override fun onCreate() {
@@ -240,97 +242,104 @@ class RecordingService : Service() {
     }
 
     private fun stopProjectionSession() {
-        val state = RecordingStateStore.state.value
-        if (state !is RecordingState.Recording && state !is RecordingState.Paused) return
-
-        RecordingStateStore.transition(RecordingState.Stopping)
-        RecordingStateStore.transition(RecordingState.Processing)
-
-        recoveryCheckpointEnabled = false
-        cancelRecoveryCheckpoint()
-        cancelGuardian()
-        val highlights = RecordingSessionStore.snapshotHighlights()
-        val saved = recorderEngine.stopAndSave()
-        intentionalStop = true
-        projectionController.stop()
-
-        if (saved != null) {
-            publishSavedRecording(saved)
-            highlightRepository.save(
-                recordingUri = saved.uri?.toString(),
-                displayName = saved.displayName,
-                highlightsMillis = highlights,
-            )
-            recoveryManager.markSessionClosed()
-            RecordingStateStore.transition(RecordingState.Completed)
-        } else {
-            val recovered = recoveryManager.recoverIfNeeded()
-            if (recovered != null) {
-                SavedRecordingStore.setSaved(
-                    displayName = recovered.displayName,
-                    location = recovered.locationLabel,
-                )
-                RecordingStateStore.transition(RecordingState.Completed)
-            } else {
-                RecordingStateStore.forceError(RecordingError.MuxerFailure)
-            }
-        }
-
-        RecordingSessionStore.clear()
-        floatingControls?.hide()
-        stopForegroundAndSelf()
+        beginAsyncStop(
+            failure = RecordingError.MuxerFailure,
+            stopProjectionWhenDone = true,
+        )
     }
 
     private fun handleProjectionStopped() {
         if (intentionalStop) return
 
-        val current = RecordingStateStore.state.value
-        var completedSafely = false
+        beginAsyncStop(
+            failure = RecordingError.RecordingInterrupted,
+            stopProjectionWhenDone = false,
+        )
+    }
 
-        if (current is RecordingState.Recording || current is RecordingState.Paused) {
-            RecordingStateStore.transition(RecordingState.Stopping)
-            RecordingStateStore.transition(RecordingState.Processing)
-
-            recoveryCheckpointEnabled = false
-            cancelRecoveryCheckpoint()
-            cancelGuardian()
-            val highlights = RecordingSessionStore.snapshotHighlights()
-            val saved = recorderEngine.stopAndSave()
-            if (saved != null) {
-                publishSavedRecording(saved)
-                highlightRepository.save(
-                    recordingUri = saved.uri?.toString(),
-                    displayName = saved.displayName,
-                    highlightsMillis = highlights,
-                )
-                recoveryManager.markSessionClosed()
-                RecordingStateStore.transition(RecordingState.Completed)
-                completedSafely = true
-            } else {
-                val recovered = recoveryManager.recoverIfNeeded()
-                if (recovered != null) {
-                    SavedRecordingStore.setSaved(
-                        displayName = recovered.displayName,
-                        location = recovered.locationLabel,
-                    )
-                    RecordingStateStore.transition(RecordingState.Completed)
-                    completedSafely = true
-                } else {
-                    RecordingStateStore.forceError(RecordingError.RecordingInterrupted)
-                }
-            }
+    private fun beginAsyncStop(
+        failure: RecordingError,
+        stopProjectionWhenDone: Boolean,
+    ) {
+        val state = RecordingStateStore.state.value
+        if (
+            stopSaveInProgress ||
+            (state !is RecordingState.Recording && state !is RecordingState.Paused)
+        ) {
+            return
         }
 
+        stopSaveInProgress = true
+        intentionalStop = true
         recoveryCheckpointEnabled = false
         cancelRecoveryCheckpoint()
         cancelGuardian()
-        if (!completedSafely) {
-            recoveryManager.clearInterruptedFlag()
+
+        RecordingStateStore.transition(RecordingState.Stopping)
+        RecordingStateStore.transition(RecordingState.Processing)
+
+        val highlights = RecordingSessionStore.snapshotHighlights()
+
+        thread(
+            start = true,
+            name = "MemoryCapture-StopAndSave",
+        ) {
+            val saved = runCatching {
+                recorderEngine.stopAndSave()
+            }.getOrNull()
+
+            val recovered = if (saved == null) {
+                runCatching {
+                    recoveryManager.recoverIfNeeded()
+                }.getOrNull()
+            } else {
+                null
+            }
+
+            if (saved != null) {
+                runCatching {
+                    highlightRepository.save(
+                        recordingUri = saved.uri?.toString(),
+                        displayName = saved.displayName,
+                        highlightsMillis = highlights,
+                    )
+                }
+                recoveryManager.markSessionClosed()
+            } else if (recovered == null) {
+                recoveryManager.clearInterruptedFlag()
+            }
+
+            recoveryHandler.post {
+                if (stopProjectionWhenDone) {
+                    projectionController.stop()
+                }
+
+                when {
+                    saved != null -> {
+                        publishSavedRecording(saved)
+                        RecordingStateStore.transition(RecordingState.Completed)
+                    }
+
+                    recovered != null -> {
+                        SavedRecordingStore.setSaved(
+                            displayName = recovered.displayName,
+                            location = recovered.locationLabel,
+                        )
+                        RecordingStateStore.transition(RecordingState.Completed)
+                    }
+
+                    else -> {
+                        RecordingStateStore.forceError(failure)
+                    }
+                }
+
+                RecordingSessionStore.clear()
+                RecordingGuardianStore.clear()
+                floatingControls?.hide()
+                stopSaveInProgress = false
+                stopForegroundAndSelf()
+            }
         }
-        RecordingSessionStore.clear()
-        intentionalStop = true
-        floatingControls?.hide()
-        stopForegroundAndSelf()
     }
 
     private fun publishSavedRecording(saved: SavedRecording) {
