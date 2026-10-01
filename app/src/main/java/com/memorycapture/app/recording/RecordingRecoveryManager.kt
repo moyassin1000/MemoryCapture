@@ -2,6 +2,7 @@ package com.memorycapture.app.recording
 
 import android.content.ContentValues
 import android.content.Context
+import android.media.MediaExtractor
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
@@ -37,26 +38,25 @@ class RecordingRecoveryManager(
     private val checkpointBackupFile: File
         get() = File(recoveryDirectory, CHECKPOINT_BACKUP_NAME)
 
+    @Synchronized
     fun markSessionActive() {
+        cleanupCheckpointFiles()
         preferences.edit()
             .putBoolean(KEY_SESSION_ACTIVE, true)
             .putLong(KEY_SESSION_STARTED_AT, System.currentTimeMillis())
             .apply()
     }
 
+    @Synchronized
     fun markSessionClosed() {
-        preferences.edit()
-            .putBoolean(KEY_SESSION_ACTIVE, false)
-            .remove(KEY_SESSION_STARTED_AT)
-            .apply()
-        runCatching { checkpointFile.delete() }
-        runCatching { checkpointTempFile.delete() }
-        runCatching { checkpointBackupFile.delete() }
+        clearInterruptedFlag()
+        cleanupCheckpointFiles()
     }
 
+    @Synchronized
     fun commitCheckpoint(): Boolean {
         val temp = checkpointTempFile
-        if (!temp.exists() || temp.length() <= MIN_RECOVERY_BYTES) {
+        if (!isUsableCheckpoint(temp, requireSessionMatch = true)) {
             runCatching { temp.delete() }
             return false
         }
@@ -95,31 +95,81 @@ class RecordingRecoveryManager(
             .apply()
     }
 
-    fun recoverIfNeeded(): RecoveredRecording? {
-        if (!hasInterruptedSession()) return null
+    @Synchronized
+    fun discardRecoveryState() {
+        clearInterruptedFlag()
+        cleanupCheckpointFiles()
+    }
 
-        val file = when {
-            checkpointFile.exists() && checkpointFile.length() > MIN_RECOVERY_BYTES ->
-                checkpointFile
-            checkpointBackupFile.exists() &&
-                checkpointBackupFile.length() > MIN_RECOVERY_BYTES ->
-                checkpointBackupFile
-            else -> null
-        } ?: run {
-            runCatching { checkpointFile.delete() }
-            runCatching { checkpointTempFile.delete() }
-            runCatching { checkpointBackupFile.delete() }
+    @Synchronized
+    fun recoverIfNeeded(): RecoveredRecording? {
+        if (!hasInterruptedSession()) {
+            cleanupCheckpointFiles()
+            return null
+        }
+
+        val file = listOf(
+            checkpointFile,
+            checkpointBackupFile,
+            checkpointTempFile,
+        )
+            .filter { isUsableCheckpoint(it, requireSessionMatch = true) }
+            .maxByOrNull { it.lastModified() }
+
+        if (file == null) {
+            discardRecoveryState()
             return null
         }
 
         val recovered = importRecoveredFile(file)
         if (recovered != null) {
             clearInterruptedFlag()
-            runCatching { checkpointFile.delete() }
-            runCatching { checkpointTempFile.delete() }
-            runCatching { checkpointBackupFile.delete() }
+            cleanupCheckpointFiles()
         }
         return recovered
+    }
+
+    private fun isUsableCheckpoint(
+        file: File,
+        requireSessionMatch: Boolean,
+    ): Boolean {
+        if (!file.exists() || file.length() <= MIN_RECOVERY_BYTES) {
+            return false
+        }
+
+        if (requireSessionMatch) {
+            val sessionStartedAt = preferences.getLong(KEY_SESSION_STARTED_AT, 0L)
+            if (
+                sessionStartedAt > 0L &&
+                file.lastModified() + CHECKPOINT_CLOCK_TOLERANCE_MS < sessionStartedAt
+            ) {
+                return false
+            }
+        }
+
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(file.absolutePath)
+            (0 until extractor.trackCount).any { index ->
+                val format = extractor.getTrackFormat(index)
+                format.getString(android.media.MediaFormat.KEY_MIME)
+                    ?.startsWith("video/") == true
+            }
+        } catch (_: Throwable) {
+            false
+        } finally {
+            runCatching { extractor.release() }
+        }
+    }
+
+    private fun cleanupCheckpointFiles() {
+        listOf(
+            checkpointFile,
+            checkpointTempFile,
+            checkpointBackupFile,
+        ).forEach { file ->
+            runCatching { file.delete() }
+        }
     }
 
     private fun importRecoveredFile(file: File): RecoveredRecording? {
@@ -203,5 +253,6 @@ class RecordingRecoveryManager(
         private const val CHECKPOINT_TEMP_NAME = "last_recovery_checkpoint.tmp.mp4"
         private const val CHECKPOINT_BACKUP_NAME = "last_recovery_checkpoint.bak.mp4"
         private const val MIN_RECOVERY_BYTES = 16 * 1024L
+        private const val CHECKPOINT_CLOCK_TOLERANCE_MS = 5_000L
     }
 }
