@@ -462,6 +462,9 @@ class ScreenRecorderEngine(
         val activeDisplay = virtualDisplay
         val activeAudio = audioCaptureEngine
         val output = outputHandle
+        val audioTrackWasRegistered = synchronized(muxerLock) {
+            expectedTrackCount == 1 || audioTrackIndex >= 0
+        }
         val activeDrainThread = drainThread
 
         started = false
@@ -481,7 +484,10 @@ class ScreenRecorderEngine(
             if (!signaled) stoppedCleanly = false
 
             activeAudio?.stopAndWait()
-            if (activeAudio?.failure != null) {
+            if (
+                activeAudio?.failure != null &&
+                !audioTrackWasRegistered
+            ) {
                 stoppedCleanly = false
             }
 
@@ -584,6 +590,25 @@ class ScreenRecorderEngine(
     }
 
     fun isActive(): Boolean = started
+
+    fun audioHealth(): AudioCaptureHealth =
+        audioCaptureEngine?.health() ?: AudioCaptureHealth.NotRequested
+
+    fun hasFatalRuntimeFailure(): Boolean {
+        if (drainFailure != null) return true
+
+        val videoThreadDead =
+            started && drainThread != null && drainThread?.isAlive == false
+        if (videoThreadDead) return true
+
+        val audioFailedBeforeTrackReady =
+            audioCaptureEngine?.failure != null &&
+                synchronized(muxerLock) {
+                    expectedTrackCount > 1 && audioTrackIndex < 0
+                }
+
+        return audioFailedBeforeTrackReady
+    }
 
     fun estimatedOutputBytesPerSecond(): Long =
         estimatedBytesPerSecond.coerceAtLeast(MIN_ESTIMATED_BYTES_PER_SECOND)
