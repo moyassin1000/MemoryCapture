@@ -360,36 +360,6 @@ class AudioCaptureEngine(
                     lastMicNonZeroElapsedMs = nowElapsedMs
                 }
 
-                if (
-                    communicationActive &&
-                    !lastCommunicationActive &&
-                    microphoneRequested &&
-                    accessibilityAssistEnabled &&
-                    mic != null &&
-                    micSourceIndex == 0
-                ) {
-                    val replacement = replaceMicrophoneRecord(
-                        current = mic,
-                        format = audioFormat,
-                        bufferSize = bufferSize,
-                        preferredMicDeviceId = preferredMicDeviceId,
-                        audioSource = MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                    )
-                    if (replacement !== mic) {
-                        mic = replacement
-                        micAvailable = true
-                        updateRuntimeHealth(
-                            mode = mode,
-                            micAvailable = true,
-                            playbackAvailable = playbackAvailable,
-                        )
-                        micSourceIndex = 1
-                        lastMicSourceSwitchElapsedMs = nowElapsedMs
-                        lastMicNonZeroElapsedMs = nowElapsedMs
-                        callMicSilencedBySystem = false
-                    }
-                }
-
                 if (communicationActive) {
                     if (
                         voipAssistEnabled &&
@@ -489,6 +459,8 @@ class AudioCaptureEngine(
                             playbackAvailable = playbackAvailable,
                         )
                         micSourceIndex = targetIndex
+                        lastMicSourceSwitchElapsedMs = nowElapsedMs
+                        lastMicNonZeroElapsedMs = nowElapsedMs
                         callMicSilencedBySystem = false
                     }
                 }
