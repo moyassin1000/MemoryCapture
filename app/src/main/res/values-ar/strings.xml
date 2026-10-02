@@ -278,7 +278,7 @@
     <string name="voip_assist_title">مساعدة تسجيل جميع المكالمات</string>
     <string name="voip_assist_body">للمكالمات العادية وMessenger وInstagram وWhatsApp وغيرها: يحاول MemoryCapture إبقاء تصوير الشاشة مستمرًا، وتوجيه صوت المكالمة للسماعة الخارجية، والتقاط صوتك وصوت الطرف الآخر بالميكروفون عندما يسمح أندرويد بذلك.</string>
     <string name="enhanced_call_compat_title">توافق محسن لتسجيل المكالمات</string>
-    <string name="enhanced_call_compat_body">على Samsung Galaxy A24 والأجهزة المشابهة، اترك خدمة التوافق من تسهيلات الاستخدام مفعلة قبل تسجيل المكالمات. الخدمة لا تقرأ محتوى النوافذ أو الشاشة؛ وظيفتها فقط تحسين إتاحة الميكروفون أثناء المكالمة الهاتفية أو مكالمات الإنترنت.</string>
+    <string name="enhanced_call_compat_body">على Samsung Galaxy A24 والأجهزة المشابهة، يجهز MemoryCapture إعدادات المكالمات تلقائيًا. إذا كانت خدمة التوافق غير مفعلة فسيفتح إعدادات تسهيلات الاستخدام تلقائيًا عند بدء التسجيل؛ تحتاج فقط لتفعيلها مرة واحدة. الخدمة لا تقرأ محتوى النوافذ أو الشاشة.</string>
     <string name="enhanced_call_compat_enabled">مفعل</string>
     <string name="enhanced_call_compat_disabled">غير مفعل</string>
     <string name="enhanced_call_compat_enable">تفعيل</string>
