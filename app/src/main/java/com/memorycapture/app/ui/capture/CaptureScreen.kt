@@ -435,7 +435,10 @@ fun CaptureScreen(
                             enabled = !active && !busy,
                             onClick = {
                                 context.startActivity(
-                                    Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+                                    Intent(
+                                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                        Uri.parse("package:${context.packageName}"),
+                                    ),
                                 )
                             },
                         ) {
