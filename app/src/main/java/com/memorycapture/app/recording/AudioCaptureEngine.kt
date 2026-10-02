@@ -81,9 +81,6 @@ class AudioCaptureEngine(
     @Volatile
     private var activeMicSource = MediaRecorder.AudioSource.MIC
 
-    @Volatile
-    private var accessibilityAssistEnabled = false
-
     private val communicationRouteLock = Any()
     private var speakerAssistApplied = false
     private var legacySpeakerWasOn = false
@@ -203,8 +200,6 @@ class AudioCaptureEngine(
             voipAssistEnabled = voipCaptureAssistEnabled
             callMicSilencedBySystem = false
             activeMicSource = MediaRecorder.AudioSource.MIC
-            accessibilityAssistEnabled =
-                CallCaptureCompatibility.isAccessibilityAssistEnabled(context)
             lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
             paused = false
             running = true
@@ -397,7 +392,6 @@ class AudioCaptureEngine(
                     if (
                         communicationActive &&
                         silenced &&
-                        accessibilityAssistEnabled &&
                         nowElapsedMs - lastMicSourceSwitchElapsedMs >=
                             CALL_MIC_SOURCE_SWITCH_COOLDOWN_MS
                     ) {
@@ -435,10 +429,7 @@ class AudioCaptureEngine(
                         CALL_MIC_RECOVERY_INTERVAL_MS
                 ) {
                     lastMicRecoveryAttemptElapsedMs = nowElapsedMs
-                    val targetIndex = if (
-                        communicationActive &&
-                        accessibilityAssistEnabled
-                    ) {
+                    val targetIndex = if (communicationActive) {
                         (micSourceIndex + 1) % CALL_MIC_AUDIO_SOURCES.size
                     } else {
                         0
@@ -527,7 +518,6 @@ class AudioCaptureEngine(
                     communicationActive &&
                     microphoneRequested &&
                     voipAssistEnabled &&
-                    accessibilityAssistEnabled &&
                     micAvailable &&
                     mic != null &&
                     !micHasNonZeroPcm &&
@@ -1078,7 +1068,6 @@ class AudioCaptureEngine(
         voipStatus = VoipCaptureStatus.Inactive
         callMicSilencedBySystem = false
         activeMicSource = MediaRecorder.AudioSource.MIC
-        accessibilityAssistEnabled = false
         if (runtimeHealth == AudioCaptureHealth.Healthy && failure != null) {
             runtimeHealth = AudioCaptureHealth.AllAudioLost
         }
