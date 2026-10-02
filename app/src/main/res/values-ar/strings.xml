@@ -278,7 +278,7 @@
     <string name="voip_assist_title">مساعدة تسجيل جميع المكالمات</string>
     <string name="voip_assist_body">للمكالمات العادية وMessenger وInstagram وWhatsApp وغيرها: يحاول MemoryCapture إبقاء تصوير الشاشة مستمرًا، وتوجيه صوت المكالمة للسماعة الخارجية، والتقاط صوتك وصوت الطرف الآخر بالميكروفون عندما يسمح أندرويد بذلك.</string>
     <string name="enhanced_call_compat_title">توافق محسن لتسجيل المكالمات</string>
-    <string name="enhanced_call_compat_body">خيار يدوي من إعدادات تسهيلات الاستخدام. لا يقرأ MemoryCapture محتوى الشاشة أو نوافذ التطبيقات من هذه الخدمة؛ الغرض هو تحسين مشاركة إدخال الميكروفون أثناء المكالمات عندما يدعم الجهاز ذلك.</string>
+    <string name="enhanced_call_compat_body">على Samsung Galaxy A24 والأجهزة المشابهة، يجهز MemoryCapture إعدادات المكالمات تلقائيًا. إذا كانت خدمة التوافق غير مفعلة فسيفتح إعدادات تسهيلات الاستخدام تلقائيًا عند بدء التسجيل؛ تحتاج فقط لتفعيلها مرة واحدة. الخدمة لا تقرأ محتوى النوافذ أو الشاشة.</string>
     <string name="enhanced_call_compat_enabled">مفعل</string>
     <string name="enhanced_call_compat_disabled">غير مفعل</string>
     <string name="enhanced_call_compat_enable">تفعيل</string>
@@ -288,7 +288,7 @@
     <string name="guardian_voip_inactive">لا توجد مكالمة نشطة</string>
     <string name="guardian_voip_call_detected">تم اكتشاف مكالمة. التوجيه للسماعة غير مفعل أو لم يتم قبوله.</string>
     <string name="guardian_voip_speaker_assist">تم تفعيل Speaker Assist. يحاول MemoryCapture التقاط صوت الطرفين صوتيًا.</string>
-    <string name="guardian_voip_silenced">أندرويد حجب ميكروفون MemoryCapture أثناء المكالمة. سيستمر الفيديو ويحافظ التطبيق على التزامن، ويمكن تفعيل التوافق المحسن لمحاولة السماح بالتقاط الميكروفون أثناء المكالمات.</string>
+    <string name="guardian_voip_silenced">أندرويد حجب ميكروفون MemoryCapture أثناء المكالمة. سيستمر الفيديو متزامنًا بينما يجرب التطبيق مصادر ميكروفون بديلة تلقائيًا؛ اترك التوافق المحسن مفعّلًا لزيادة فرصة استعادة الصوت.</string>
     <string name="guardian_voip_no_mic_path">تم اكتشاف مكالمة لكن وضع التسجيل الحالي لا يستخدم الميكروفون. اختر الميكروفون أو الجهاز + الميكروفون لتجربة التقاط صوت المكالمة.</string>
     <string name="guardian_warning">يوجد خطر على استمرار التسجيل. سيحاول MemoryCapture الحفظ بأمان قبل الوصول لمرحلة الخطر.</string>
     <string name="guardian_unknown">غير متاح</string>
