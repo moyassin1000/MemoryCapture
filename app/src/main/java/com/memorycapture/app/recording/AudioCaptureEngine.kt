@@ -429,10 +429,7 @@ class AudioCaptureEngine(
                         CALL_MIC_RECOVERY_INTERVAL_MS
                 ) {
                     lastMicRecoveryAttemptElapsedMs = nowElapsedMs
-                    val targetIndex = if (
-                        communicationActive &&
-                        true
-                    ) {
+                    val targetIndex = if (communicationActive) {
                         (micSourceIndex + 1) % CALL_MIC_AUDIO_SOURCES.size
                     } else {
                         0
