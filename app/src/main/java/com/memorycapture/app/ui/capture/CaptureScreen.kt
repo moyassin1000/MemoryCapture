@@ -58,9 +58,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.memorycapture.app.R
 import com.memorycapture.app.data.preferences.AppPreferences
@@ -70,7 +67,6 @@ import com.memorycapture.app.data.preferences.RecordingFrameRate
 import com.memorycapture.app.data.preferences.RecordingQuality
 import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.recording.AudioCaptureHealth
-import com.memorycapture.app.recording.CallCaptureCompatibility
 import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.GuardianThermalLevel
 import com.memorycapture.app.recording.RecordingGuardianStore
@@ -95,12 +91,6 @@ fun CaptureScreen(
     val context = LocalContext.current
     val preferences = remember { AppPreferences(context.applicationContext) }
     val scope = rememberCoroutineScope()
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var enhancedCallCompatibilityEnabled by remember {
-        mutableStateOf(
-            CallCaptureCompatibility.isAccessibilityAssistEnabled(context),
-        )
-    }
     val storageLabel by preferences.storageLabel.collectAsStateWithLifecycle(initialValue = null)
     val audioMode by preferences.audioMode.collectAsStateWithLifecycle(
         initialValue = AudioMode.DeviceAndMic,
@@ -129,19 +119,6 @@ fun CaptureScreen(
         mutableStateOf(
             audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).toList(),
         )
-    }
-
-    DisposableEffect(lifecycleOwner, context) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                enhancedCallCompatibilityEnabled =
-                    CallCaptureCompatibility.isAccessibilityAssistEnabled(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
     }
 
     DisposableEffect(audioManager) {
@@ -380,18 +357,6 @@ fun CaptureScreen(
                             scope.launch {
                                 preferences.setVoipCaptureAssistEnabled(enabled)
                             }
-                        },
-                    )
-                }
-
-                item {
-                    EnhancedCallCompatibilityCard(
-                        enabled = enhancedCallCompatibilityEnabled,
-                        controlsEnabled = !active && !busy,
-                        onManage = {
-                            context.startActivity(
-                                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
-                            )
                         },
                     )
                 }
@@ -657,78 +622,6 @@ private fun formatGuardianRemaining(seconds: Long): String {
         "${hours}h ${minutes}m"
     } else {
         "${minutes}m"
-    }
-}
-
-@Composable
-private fun EnhancedCallCompatibilityCard(
-    enabled: Boolean,
-    controlsEnabled: Boolean,
-    onManage: () -> Unit,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(10.dp, MaterialTheme.shapes.large),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-        ),
-    ) {
-        Row(
-            modifier = Modifier.padding(18.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Default.Mic,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.enhanced_call_compat_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                )
-                Text(
-                    text = stringResource(R.string.enhanced_call_compat_body),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = stringResource(
-                        if (enabled) {
-                            R.string.enhanced_call_compat_enabled
-                        } else {
-                            R.string.enhanced_call_compat_disabled
-                        },
-                    ),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (enabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.error
-                    },
-                )
-            }
-            OutlinedButton(
-                enabled = controlsEnabled,
-                onClick = onManage,
-            ) {
-                Text(
-                    stringResource(
-                        if (enabled) {
-                            R.string.enhanced_call_compat_manage
-                        } else {
-                            R.string.enhanced_call_compat_enable
-                        },
-                    ),
-                )
-            }
-        }
     }
 }
 

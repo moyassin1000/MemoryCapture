@@ -41,19 +41,6 @@
         </service>
 
         <service
-            android:name=".service.CallCaptureAccessibilityService"
-            android:label="@string/enhanced_call_compat_title"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/call_capture_accessibility_service" />
-        </service>
-
-        <service
             android:name=".service.RecordingService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection|microphone"
