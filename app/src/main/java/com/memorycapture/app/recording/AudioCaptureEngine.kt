@@ -339,6 +339,8 @@ class AudioCaptureEngine(
         var lastMicRecoveryAttemptElapsedMs = 0L
         var lastCommunicationActive = false
         var lastSpeakerAssistAttemptElapsedMs = 0L
+        var lastMicNonZeroElapsedMs = SystemClock.elapsedRealtime()
+        var lastMicSourceSwitchElapsedMs = 0L
 
         try {
             while (running && !Thread.currentThread().isInterrupted) {
@@ -353,6 +355,10 @@ class AudioCaptureEngine(
                 val communicationActive = isCommunicationActive()
                 val microphoneRequested =
                     mode == AudioMode.Microphone || mode == AudioMode.DeviceAndMic
+
+                if (communicationActive && !lastCommunicationActive) {
+                    lastMicNonZeroElapsedMs = nowElapsedMs
+                }
 
                 if (
                     communicationActive &&
@@ -378,6 +384,8 @@ class AudioCaptureEngine(
                             playbackAvailable = playbackAvailable,
                         )
                         micSourceIndex = 1
+                        lastMicSourceSwitchElapsedMs = nowElapsedMs
+                        lastMicNonZeroElapsedMs = nowElapsedMs
                         callMicSilencedBySystem = false
                     }
                 }
@@ -420,9 +428,11 @@ class AudioCaptureEngine(
                         communicationActive &&
                         silenced &&
                         accessibilityAssistEnabled &&
-                        micSourceIndex < CALL_MIC_AUDIO_SOURCES.lastIndex
+                        nowElapsedMs - lastMicSourceSwitchElapsedMs >=
+                            CALL_MIC_SOURCE_SWITCH_COOLDOWN_MS
                     ) {
-                        val nextIndex = micSourceIndex + 1
+                        val nextIndex =
+                            (micSourceIndex + 1) % CALL_MIC_AUDIO_SOURCES.size
                         val replacement = replaceMicrophoneRecord(
                             current = mic,
                             format = audioFormat,
@@ -440,6 +450,8 @@ class AudioCaptureEngine(
                             )
                             micSourceIndex = nextIndex
                             lastMicRecoveryAttemptElapsedMs = nowElapsedMs
+                            lastMicSourceSwitchElapsedMs = nowElapsedMs
+                            lastMicNonZeroElapsedMs = nowElapsedMs
                             callMicSilencedBySystem = false
                         }
                     }
@@ -457,8 +469,7 @@ class AudioCaptureEngine(
                         communicationActive &&
                         accessibilityAssistEnabled
                     ) {
-                        (micSourceIndex + 1)
-                            .coerceAtMost(CALL_MIC_AUDIO_SOURCES.lastIndex)
+                        (micSourceIndex + 1) % CALL_MIC_AUDIO_SOURCES.size
                     } else {
                         0
                     }
@@ -526,6 +537,56 @@ class AudioCaptureEngine(
                     }
                 } else {
                     0
+                }
+
+                val micHasNonZeroPcm =
+                    micBytes > 0 && hasNonZeroPcm16(micBuffer, micBytes)
+
+                if (
+                    communicationActive &&
+                    microphoneRequested &&
+                    micHasNonZeroPcm
+                ) {
+                    lastMicNonZeroElapsedMs = nowElapsedMs
+                    callMicSilencedBySystem = false
+                }
+
+                if (
+                    communicationActive &&
+                    microphoneRequested &&
+                    voipAssistEnabled &&
+                    accessibilityAssistEnabled &&
+                    micAvailable &&
+                    mic != null &&
+                    !micHasNonZeroPcm &&
+                    nowElapsedMs - lastMicNonZeroElapsedMs >=
+                        CALL_ZERO_PCM_ROTATE_MS &&
+                    nowElapsedMs - lastMicSourceSwitchElapsedMs >=
+                        CALL_MIC_SOURCE_SWITCH_COOLDOWN_MS
+                ) {
+                    val nextIndex =
+                        (micSourceIndex + 1) % CALL_MIC_AUDIO_SOURCES.size
+                    val replacement = replaceMicrophoneRecord(
+                        current = mic,
+                        format = audioFormat,
+                        bufferSize = bufferSize,
+                        preferredMicDeviceId = preferredMicDeviceId,
+                        audioSource = CALL_MIC_AUDIO_SOURCES[nextIndex],
+                    )
+                    if (replacement != null && replacement !== mic) {
+                        mic = replacement
+                        micAvailable = true
+                        updateRuntimeHealth(
+                            mode = mode,
+                            micAvailable = true,
+                            playbackAvailable = playbackAvailable,
+                        )
+                        micSourceIndex = nextIndex
+                        lastMicRecoveryAttemptElapsedMs = nowElapsedMs
+                        lastMicSourceSwitchElapsedMs = nowElapsedMs
+                        lastMicNonZeroElapsedMs = nowElapsedMs
+                        callMicSilencedBySystem = false
+                    }
                 }
 
                 val playbackBytes = if (
@@ -839,6 +900,21 @@ class AudioCaptureEngine(
         return bytes
     }
 
+    private fun hasNonZeroPcm16(
+        buffer: ByteArray,
+        byteCount: Int,
+    ): Boolean {
+        val bytes = minOf(buffer.size, byteCount.coerceAtLeast(0)).and(-2)
+        var index = 0
+        while (index < bytes) {
+            if (buffer[index].toInt() != 0 || buffer[index + 1].toInt() != 0) {
+                return true
+            }
+            index += 2
+        }
+        return false
+    }
+
     private fun isMicrophoneSilencedBySystem(record: AudioRecord): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
 
@@ -1052,6 +1128,8 @@ class AudioCaptureEngine(
         private const val AUDIO_IDLE_BACKOFF_MS = 5L
         private const val CALL_MIC_PROBE_INTERVAL_MS = 1_000L
         private const val CALL_MIC_RECOVERY_INTERVAL_MS = 1_000L
+        private const val CALL_ZERO_PCM_ROTATE_MS = 2_500L
+        private const val CALL_MIC_SOURCE_SWITCH_COOLDOWN_MS = 1_500L
         private const val SPEAKER_ASSIST_REASSERT_INTERVAL_MS = 500L
         private const val AUDIO_FRAME_MS = 20L
         private const val SYNTHETIC_SILENCE_PACE_MS = AUDIO_FRAME_MS
@@ -1061,6 +1139,7 @@ class AudioCaptureEngine(
         private val CALL_MIC_AUDIO_SOURCES = intArrayOf(
             MediaRecorder.AudioSource.MIC,
             MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
         )
         private const val EOS_QUEUE_RETRIES = 100
         private const val EOS_DRAIN_IDLE_LIMIT = 100
