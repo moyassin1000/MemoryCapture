@@ -276,15 +276,7 @@
     <string name="guardian_audio_device_lost">Device audio was lost. Video recording will continue.</string>
     <string name="guardian_audio_all_lost">Audio capture stopped. Video recording will continue.</string>
     <string name="voip_assist_title">Universal Call Capture Assist</string>
-    <string name="voip_assist_body">For cellular calls, Messenger, Instagram, WhatsApp, and other calls: MemoryCapture tries to keep screen recording alive, route call audio to the speaker, and capture both sides acoustically with the microphone when Android permits it.</string>
-    <string name="enhanced_call_compat_title">Enhanced Call Compatibility</string>
-    <string name="enhanced_call_compat_body">Optional user-enabled Accessibility setting. MemoryCapture does not read app windows or screen content through this service; it is used only to improve microphone sharing during calls when the device supports it.</string>
-    <string name="enhanced_call_compat_enabled">Enabled</string>
-    <string name="enhanced_call_compat_disabled">Disabled</string>
-    <string name="enhanced_call_compat_enable">Enable</string>
-    <string name="enhanced_call_compat_manage">Manage</string>
-    <string name="call_accessibility_description">Improves MemoryCapture call-time audio compatibility without reading window content.</string>
-    <string name="guardian_voip_line">Call: %1$s</string>
+    <string name="voip_assist_body">For cellular calls, Messenger, Instagram, WhatsApp, and other calls: MemoryCapture tries to keep screen recording alive, route call audio to the speaker, and capture both sides acoustically with the microphone when Android permits it.</string>    <string name="guardian_voip_line">Call: %1$s</string>
     <string name="guardian_voip_inactive">No active call</string>
     <string name="guardian_voip_call_detected">Call detected. Speaker routing is disabled or was not accepted.</string>
     <string name="guardian_voip_speaker_assist">Speaker Assist is active. MemoryCapture is attempting acoustic two-sided capture.</string>
