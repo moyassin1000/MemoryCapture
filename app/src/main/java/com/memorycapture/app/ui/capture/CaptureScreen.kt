@@ -71,7 +71,6 @@ import com.memorycapture.app.data.preferences.RecordingFrameRate
 import com.memorycapture.app.data.preferences.RecordingQuality
 import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.recording.AudioCaptureHealth
-import com.memorycapture.app.recording.CallCaptureCompatibility
 import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.GuardianThermalLevel
 import com.memorycapture.app.recording.RecordingGuardianStore
@@ -97,11 +96,6 @@ fun CaptureScreen(
     val preferences = remember { AppPreferences(context.applicationContext) }
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
-    var enhancedCallCompatibilityEnabled by remember {
-        mutableStateOf(
-            CallCaptureCompatibility.isAccessibilityAssistEnabled(context),
-        )
-    }
     val powerManager = remember {
         context.getSystemService(PowerManager::class.java)
     }
@@ -143,8 +137,6 @@ fun CaptureScreen(
     DisposableEffect(lifecycleOwner, context, powerManager) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                enhancedCallCompatibilityEnabled =
-                    CallCaptureCompatibility.isAccessibilityAssistEnabled(context)
                 batteryOptimizationRestricted =
                     !powerManager.isIgnoringBatteryOptimizations(context.packageName)
             }
@@ -408,18 +400,6 @@ fun CaptureScreen(
                 }
 
                 item {
-                    EnhancedCallCompatibilityCard(
-                        enabled = enhancedCallCompatibilityEnabled,
-                        controlsEnabled = !active && !busy,
-                        onManage = {
-                            context.startActivity(
-                                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
-                            )
-                        },
-                    )
-                }
-
-                item {
                     CaptureOptionCard(
                         icon = Icons.Default.AllInclusive,
                         title = stringResource(R.string.recording_protection_title),
@@ -435,10 +415,7 @@ fun CaptureScreen(
                             enabled = !active && !busy,
                             onClick = {
                                 context.startActivity(
-                                    Intent(
-                                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                        Uri.parse("package:${context.packageName}"),
-                                    ),
+                                    Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
                                 )
                             },
                         ) {
@@ -752,78 +729,6 @@ private fun formatGuardianRemaining(seconds: Long): String {
         "${hours}h ${minutes}m"
     } else {
         "${minutes}m"
-    }
-}
-
-@Composable
-private fun EnhancedCallCompatibilityCard(
-    enabled: Boolean,
-    controlsEnabled: Boolean,
-    onManage: () -> Unit,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(10.dp, MaterialTheme.shapes.large),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-        ),
-    ) {
-        Row(
-            modifier = Modifier.padding(18.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Default.Mic,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.enhanced_call_compat_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                )
-                Text(
-                    text = stringResource(R.string.enhanced_call_compat_body),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = stringResource(
-                        if (enabled) {
-                            R.string.enhanced_call_compat_enabled
-                        } else {
-                            R.string.enhanced_call_compat_disabled
-                        },
-                    ),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (enabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.error
-                    },
-                )
-            }
-            OutlinedButton(
-                enabled = controlsEnabled,
-                onClick = onManage,
-            ) {
-                Text(
-                    stringResource(
-                        if (enabled) {
-                            R.string.enhanced_call_compat_manage
-                        } else {
-                            R.string.enhanced_call_compat_enable
-                        },
-                    ),
-                )
-            }
-        }
     }
 }
 
