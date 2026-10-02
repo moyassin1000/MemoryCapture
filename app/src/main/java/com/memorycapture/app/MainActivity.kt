@@ -6,11 +6,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.Settings
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -28,7 +25,6 @@ import com.memorycapture.app.data.preferences.RecordingQuality
 import com.memorycapture.app.data.preferences.ThemeMode
 import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.navigation.MemoryCaptureNavHost
-import com.memorycapture.app.recording.CallCaptureCompatibility
 import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.RecordingError
 import com.memorycapture.app.recording.RecordingRecoveryManager
@@ -50,9 +46,6 @@ class MainActivity : AppCompatActivity() {
     private val preferences by lazy { AppPreferences(applicationContext) }
     private val recoveryManager by lazy { RecordingRecoveryManager(applicationContext) }
     private var startupRecoveryJob: Job? = null
-    private var pendingRecordingAfterSetup = false
-    private var accessibilityPromptLaunchedForPendingRecording = false
-    private var batteryPromptLaunchedForPendingRecording = false
 
     private val projectionPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -158,15 +151,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (!pendingRecordingAfterSetup) return
-
-        lifecycleScope.launch {
-            continueAutomaticCallCaptureSetup()
-        }
-    }
-
     private fun requestRecording() {
         lifecycleScope.launch {
             startupRecoveryJob?.join()
@@ -179,10 +163,11 @@ class MainActivity : AppCompatActivity() {
             }
 
             configureAutomaticCallCaptureDefaults()
-            pendingRecordingAfterSetup = true
-            accessibilityPromptLaunchedForPendingRecording = false
-            batteryPromptLaunchedForPendingRecording = false
-            continueAutomaticCallCaptureSetup()
+
+            if (!RecordingStateStore.transition(RecordingState.Preparing)) {
+                return@launch
+            }
+            continueRecordingPermissionFlow()
         }
     }
 
@@ -196,49 +181,6 @@ class MainActivity : AppCompatActivity() {
         )
         preferences.setMicrophoneDeviceId(-1)
         preferences.setVoipCaptureAssistEnabled(true)
-    }
-
-    private suspend fun continueAutomaticCallCaptureSetup() {
-        if (!pendingRecordingAfterSetup) return
-
-        configureAutomaticCallCaptureDefaults()
-
-        val accessibilityEnabled =
-            CallCaptureCompatibility.isAccessibilityAssistEnabled(this)
-
-        if (!accessibilityEnabled && !accessibilityPromptLaunchedForPendingRecording) {
-            accessibilityPromptLaunchedForPendingRecording = true
-            val launched = runCatching {
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            }.isSuccess
-            if (launched) return
-        }
-
-        val powerManager = getSystemService(PowerManager::class.java)
-        val batteryRestricted =
-            !powerManager.isIgnoringBatteryOptimizations(packageName)
-
-        if (batteryRestricted && !batteryPromptLaunchedForPendingRecording) {
-            batteryPromptLaunchedForPendingRecording = true
-            val launched = runCatching {
-                startActivity(
-                    Intent(
-                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                        Uri.parse("package:$packageName"),
-                    ),
-                )
-            }.isSuccess
-            if (launched) return
-        }
-
-        pendingRecordingAfterSetup = false
-        accessibilityPromptLaunchedForPendingRecording = false
-        batteryPromptLaunchedForPendingRecording = false
-
-        if (!RecordingStateStore.transition(RecordingState.Preparing)) {
-            return
-        }
-        continueRecordingPermissionFlow()
     }
 
     private suspend fun continueRecordingPermissionFlow() {
