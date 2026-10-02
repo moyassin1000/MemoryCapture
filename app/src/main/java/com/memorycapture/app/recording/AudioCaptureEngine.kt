@@ -81,9 +81,6 @@ class AudioCaptureEngine(
     @Volatile
     private var activeMicSource = MediaRecorder.AudioSource.MIC
 
-    @Volatile
-    private var accessibilityAssistEnabled = false
-
     private val communicationRouteLock = Any()
     private var speakerAssistApplied = false
     private var legacySpeakerWasOn = false
@@ -203,8 +200,6 @@ class AudioCaptureEngine(
             voipAssistEnabled = voipCaptureAssistEnabled
             callMicSilencedBySystem = false
             activeMicSource = MediaRecorder.AudioSource.MIC
-            accessibilityAssistEnabled =
-                CallCaptureCompatibility.isAccessibilityAssistEnabled(context)
             lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
             paused = false
             running = true
@@ -354,34 +349,6 @@ class AudioCaptureEngine(
                 val microphoneRequested =
                     mode == AudioMode.Microphone || mode == AudioMode.DeviceAndMic
 
-                if (
-                    communicationActive &&
-                    !lastCommunicationActive &&
-                    microphoneRequested &&
-                    accessibilityAssistEnabled &&
-                    mic != null &&
-                    micSourceIndex == 0
-                ) {
-                    val replacement = replaceMicrophoneRecord(
-                        current = mic,
-                        format = audioFormat,
-                        bufferSize = bufferSize,
-                        preferredMicDeviceId = preferredMicDeviceId,
-                        audioSource = MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                    )
-                    if (replacement !== mic) {
-                        mic = replacement
-                        micAvailable = true
-                        updateRuntimeHealth(
-                            mode = mode,
-                            micAvailable = true,
-                            playbackAvailable = playbackAvailable,
-                        )
-                        micSourceIndex = 1
-                        callMicSilencedBySystem = false
-                    }
-                }
-
                 if (communicationActive) {
                     if (
                         voipAssistEnabled &&
@@ -419,7 +386,6 @@ class AudioCaptureEngine(
                     if (
                         communicationActive &&
                         silenced &&
-                        accessibilityAssistEnabled &&
                         micSourceIndex < CALL_MIC_AUDIO_SOURCES.lastIndex
                     ) {
                         val nextIndex = micSourceIndex + 1
@@ -453,10 +419,7 @@ class AudioCaptureEngine(
                         CALL_MIC_RECOVERY_INTERVAL_MS
                 ) {
                     lastMicRecoveryAttemptElapsedMs = nowElapsedMs
-                    val targetIndex = if (
-                        communicationActive &&
-                        accessibilityAssistEnabled
-                    ) {
+                    val targetIndex = if (communicationActive) {
                         (micSourceIndex + 1)
                             .coerceAtMost(CALL_MIC_AUDIO_SOURCES.lastIndex)
                     } else {
@@ -1030,7 +993,6 @@ class AudioCaptureEngine(
         voipStatus = VoipCaptureStatus.Inactive
         callMicSilencedBySystem = false
         activeMicSource = MediaRecorder.AudioSource.MIC
-        accessibilityAssistEnabled = false
         if (runtimeHealth == AudioCaptureHealth.Healthy && failure != null) {
             runtimeHealth = AudioCaptureHealth.AllAudioLost
         }
