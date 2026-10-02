@@ -278,7 +278,7 @@
     <string name="voip_assist_title">Universal Call Capture Assist</string>
     <string name="voip_assist_body">For cellular calls, Messenger, Instagram, WhatsApp, and other calls: MemoryCapture tries to keep screen recording alive, route call audio to the speaker, and capture both sides acoustically with the microphone when Android permits it.</string>
     <string name="enhanced_call_compat_title">Enhanced Call Compatibility</string>
-    <string name="enhanced_call_compat_body">For Samsung Galaxy A24 and similar devices, keep this Accessibility compatibility service enabled before recording calls. It does not read window content; it only improves microphone availability while a phone or VoIP call owns the audio input.</string>
+    <string name="enhanced_call_compat_body">On Samsung Galaxy A24 and similar devices, MemoryCapture prepares call settings automatically. If the compatibility service is off, Accessibility settings open automatically when recording starts; enable it once. The service does not read window or screen content.</string>
     <string name="enhanced_call_compat_enabled">Enabled</string>
     <string name="enhanced_call_compat_disabled">Disabled</string>
     <string name="enhanced_call_compat_enable">Enable</string>
