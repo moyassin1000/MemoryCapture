@@ -298,4 +298,20 @@
     <string name="guardian_microphone_muted">System microphone mute is active. Audio may be silent until the microphone is unmuted.</string>
     <string name="guardian_screen_off">The screen is off or not interactive. Screen frames may pause or turn black until the display wakes.</string>
 
+    <string name="call_diagnostics_title">Samsung call diagnostics</string>
+    <string name="call_diagnostics_body">Live test data for call audio. Copy the report after one test call and share it for analysis.</string>
+    <string name="call_diagnostics_copy">Copy diagnostic report</string>
+    <string name="call_diagnostics_copied">Diagnostic report copied</string>
+    <string name="call_diagnostics_call_active">Call detected: %1$s</string>
+    <string name="call_diagnostics_mic_source">Microphone source: %1$s</string>
+    <string name="call_diagnostics_android_silence">Android silenced mic: %1$s</string>
+    <string name="call_diagnostics_pcm">Mic PCM: %1$s (%2$d bytes)</string>
+    <string name="call_diagnostics_speaker">Speaker Assist: %1$s</string>
+    <string name="call_diagnostics_audio_health">Audio: %1$s / %2$s</string>
+    <string name="call_diagnostics_video_age">Latest video frame age: %1$s ms</string>
+    <string name="call_diagnostics_yes">Yes</string>
+    <string name="call_diagnostics_no">No</string>
+    <string name="call_diagnostics_signal">signal</string>
+    <string name="call_diagnostics_zero">zero/silent</string>
+    <string name="call_diagnostics_na">n/a</string>
 </resources>
