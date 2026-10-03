@@ -11,6 +11,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import com.memorycapture.app.R
 import kotlin.math.abs
@@ -102,7 +103,7 @@ class FloatingRecordingControls(
             setImageResource(R.drawable.ic_float_screen_record)
             contentDescription = context.getString(R.string.capture_tab)
             tooltipText = context.getString(R.string.capture_tab)
-            scaleType = ImageButton.ScaleType.CENTER_INSIDE
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(16), dp(16), dp(16), dp(16))
             background = floatingBubbleBackground()
             elevation = dp(16).toFloat()
@@ -206,7 +207,7 @@ class FloatingRecordingControls(
         setImageResource(iconRes)
         this.contentDescription = contentDescription
         tooltipText = contentDescription
-        scaleType = ImageButton.ScaleType.CENTER_INSIDE
+        scaleType = ImageView.ScaleType.CENTER_INSIDE
         setPadding(dp(11), dp(11), dp(11), dp(11))
         background = circleBackground(backgroundColor)
         elevation = dp(5).toFloat()
