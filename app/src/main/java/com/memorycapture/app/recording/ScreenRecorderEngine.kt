@@ -622,6 +622,12 @@ class ScreenRecorderEngine(
         audioCaptureEngine?.voipCaptureStatus()
             ?: VoipCaptureStatus.Inactive
 
+    fun callAudioDiagnostics(
+        nowElapsedMs: Long = SystemClock.elapsedRealtime(),
+    ): CallAudioDiagnostics =
+        audioCaptureEngine?.diagnostics(nowElapsedMs)
+            ?: CallAudioDiagnostics()
+
     fun isVideoDrainStalled(
         nowElapsedMs: Long,
         thresholdMs: Long,
