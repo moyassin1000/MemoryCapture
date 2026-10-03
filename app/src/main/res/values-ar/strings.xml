@@ -307,6 +307,7 @@
     <string name="call_diagnostics_android_silence">أندرويد كتم الميكروفون: %1$s</string>
     <string name="call_diagnostics_pcm">إشارة الميكروفون PCM: %1$s (%2$d بايت)</string>
     <string name="call_diagnostics_speaker">مساعدة السماعة Speaker Assist: %1$s</string>
+    <string name="call_diagnostics_fallbacks">محاولات الاستعادة: تبديل المصدر %1$d · كتم أندرويد %2$d · PCM صفري %3$d</string>
     <string name="call_diagnostics_audio_health">حالة الصوت: %1$s / %2$s</string>
     <string name="call_diagnostics_video_age">عمر آخر إطار فيديو: %1$s مللي ثانية</string>
     <string name="call_diagnostics_yes">نعم</string>
