@@ -307,6 +307,7 @@
     <string name="call_diagnostics_android_silence">Android silenced mic: %1$s</string>
     <string name="call_diagnostics_pcm">Mic PCM: %1$s (%2$d bytes)</string>
     <string name="call_diagnostics_speaker">Speaker Assist: %1$s</string>
+    <string name="call_diagnostics_fallbacks">Fallbacks: source switches %1$d · Android silence %2$d · zero PCM %3$d</string>
     <string name="call_diagnostics_audio_health">Audio: %1$s / %2$s</string>
     <string name="call_diagnostics_video_age">Latest video frame age: %1$s ms</string>
     <string name="call_diagnostics_yes">Yes</string>
