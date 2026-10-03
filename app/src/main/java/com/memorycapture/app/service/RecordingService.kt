@@ -25,6 +25,7 @@ import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.data.recordings.RecordingHighlightRepository
 import com.memorycapture.app.R
 import com.memorycapture.app.projection.MediaProjectionController
+import com.memorycapture.app.recording.CallDiagnosticsStore
 import com.memorycapture.app.recording.CallVideoRecoveryPolicy
 import com.memorycapture.app.recording.GuardianThermalLevel
 import com.memorycapture.app.recording.LongSessionWatchdog
@@ -205,6 +206,13 @@ class RecordingService : Service() {
             true,
         )
 
+        CallDiagnosticsStore.reset(
+            manufacturer = Build.MANUFACTURER,
+            model = Build.MODEL,
+            sdkInt = Build.VERSION.SDK_INT,
+            targetSdk = applicationInfo.targetSdkVersion,
+        )
+
         startAsForeground(audioMode)
         intentionalStop = false
 
@@ -244,6 +252,7 @@ class RecordingService : Service() {
             floatingControls?.show()
             floatingControls?.updatePaused(false)
         }.onFailure { error ->
+            CallDiagnosticsStore.markStopped()
             releaseRecordingWakeLock()
             recorderEngine.abort()
             RecordingSessionStore.clear()
@@ -313,6 +322,7 @@ class RecordingService : Service() {
         cancelRecoveryCheckpoint()
         cancelGuardian()
         cancelCallMonitor()
+        CallDiagnosticsStore.markStopped()
         floatingControls?.hide()
         intentionalStop = true
         finalizationInFlight = true
@@ -386,6 +396,7 @@ class RecordingService : Service() {
         cancelRecoveryCheckpoint()
         cancelGuardian()
         cancelCallMonitor()
+        CallDiagnosticsStore.markStopped()
         floatingControls?.hide()
         intentionalStop = true
         finalizationInFlight = true
@@ -535,6 +546,23 @@ class RecordingService : Service() {
             val thermalLevel = currentThermalLevel()
             val audioHealth = recorderEngine.audioHealth()
             val voipStatus = recorderEngine.currentVoipCaptureStatus()
+            val nowElapsedMs = SystemClock.elapsedRealtime()
+            val systemMicrophoneMuted =
+                getSystemService(AudioManager::class.java).isMicrophoneMute
+            val callAudioDiagnostics =
+                recorderEngine.callAudioDiagnostics(nowElapsedMs)
+
+            CallDiagnosticsStore.update(
+                recordingActive =
+                    RecordingStateStore.state.value is RecordingState.Recording ||
+                        RecordingStateStore.state.value is RecordingState.Paused,
+                videoFrameAgeMs =
+                    recorderEngine.videoFrameAgeMs(nowElapsedMs)
+                        .takeUnless { it == Long.MAX_VALUE },
+                systemMicrophoneMuted = systemMicrophoneMuted,
+                audio = callAudioDiagnostics,
+            )
+
             val destinationWarning =
                 destinationAvailableBytes?.let { available ->
                     available <= STORAGE_WARNING_BYTES ||
@@ -571,8 +599,7 @@ class RecordingService : Service() {
                     storageWarning = destinationWarning,
                     workingStorageWarning = workingStorageWarning,
                     thermalWarning = thermalWarning,
-                    microphoneMutedBySystem =
-                        getSystemService(AudioManager::class.java).isMicrophoneMute,
+                    microphoneMutedBySystem = systemMicrophoneMuted,
                     screenInteractive =
                         getSystemService(PowerManager::class.java).isInteractive,
                     cpuProtectionActive =
@@ -596,7 +623,6 @@ class RecordingService : Service() {
                     ?: false
 
             val thermalDanger = currentThermalStatusRaw() >= THERMAL_EMERGENCY_STATUS
-            val nowElapsedMs = SystemClock.elapsedRealtime()
 
             val watchdogDecision = longSessionWatchdog.evaluate(
                 LongSessionWatchdogInput(
