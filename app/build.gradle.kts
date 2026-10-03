@@ -10,9 +10,9 @@ android {
     defaultConfig {
         applicationId = "com.memorycapture.app"
         minSdk = 26
-        targetSdk = 36
-        versionCode = 12
-        versionName = "0.6.5"
+        targetSdk = 37
+        versionCode = 13
+        versionName = "0.6.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
