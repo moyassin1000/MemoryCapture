@@ -135,3 +135,163 @@ object RecordingGuardianStore {
         mutableStatus.value = RecordingGuardianStatus()
     }
 }
+
+data class CallRuntimeDiagnostics(
+    val manufacturer: String = "",
+    val model: String = "",
+    val sdkInt: Int = 0,
+    val targetSdk: Int = 0,
+    val recordingActive: Boolean = false,
+    val videoFrameAgeMs: Long? = null,
+    val systemMicrophoneMuted: Boolean = false,
+    val audio: CallAudioDiagnostics = CallAudioDiagnostics(),
+    val recentEvents: List<String> = emptyList(),
+)
+
+object CallDiagnosticsStore {
+    private var sessionStartedAtElapsedMs = 0L
+
+    private val mutableStatus = MutableStateFlow(CallRuntimeDiagnostics())
+    val status: StateFlow<CallRuntimeDiagnostics> = mutableStatus.asStateFlow()
+
+    fun reset(
+        manufacturer: String,
+        model: String,
+        sdkInt: Int,
+        targetSdk: Int,
+    ) {
+        sessionStartedAtElapsedMs = SystemClock.elapsedRealtime()
+        mutableStatus.value = CallRuntimeDiagnostics(
+            manufacturer = manufacturer,
+            model = model,
+            sdkInt = sdkInt,
+            targetSdk = targetSdk,
+            recordingActive = true,
+            recentEvents = listOf("+0.0s diagnostic session started"),
+        )
+    }
+
+    fun update(
+        recordingActive: Boolean,
+        videoFrameAgeMs: Long?,
+        systemMicrophoneMuted: Boolean,
+        audio: CallAudioDiagnostics,
+    ) {
+        val previous = mutableStatus.value
+        val events = previous.recentEvents.toMutableList()
+
+        fun addEvent(message: String) {
+            val elapsedMs =
+                if (sessionStartedAtElapsedMs > 0L) {
+                    (SystemClock.elapsedRealtime() - sessionStartedAtElapsedMs)
+                        .coerceAtLeast(0L)
+                } else {
+                    0L
+                }
+            events += "+%.1fs %s".format(elapsedMs / 1000.0, message)
+            while (events.size > MAX_EVENTS) {
+                events.removeAt(0)
+            }
+        }
+
+        if (previous.recordingActive != recordingActive) {
+            addEvent("recordingActive=$recordingActive")
+        }
+        if (previous.audio.communicationActive != audio.communicationActive) {
+            addEvent("communicationActive=${audio.communicationActive}")
+        }
+        if (previous.audio.microphoneSource != audio.microphoneSource) {
+            addEvent("micSource=${audio.microphoneSourceLabel}")
+        }
+        if (
+            previous.audio.microphoneSilencedBySystem !=
+            audio.microphoneSilencedBySystem
+        ) {
+            addEvent("systemSilenced=${audio.microphoneSilencedBySystem}")
+        }
+        if (
+            previous.audio.microphoneHasNonZeroPcm !=
+            audio.microphoneHasNonZeroPcm
+        ) {
+            addEvent(
+                "micPcm=" +
+                    if (audio.microphoneHasNonZeroPcm) "signal" else "zero",
+            )
+        }
+        if (previous.audio.speakerAssistApplied != audio.speakerAssistApplied) {
+            addEvent("speakerAssist=${audio.speakerAssistApplied}")
+        }
+        if (previous.audio.voipStatus != audio.voipStatus) {
+            addEvent("voipStatus=${audio.voipStatus}")
+        }
+        if (previous.audio.audioHealth != audio.audioHealth) {
+            addEvent("audioHealth=${audio.audioHealth}")
+        }
+        if (previous.systemMicrophoneMuted != systemMicrophoneMuted) {
+            addEvent("systemMicMuted=$systemMicrophoneMuted")
+        }
+
+        mutableStatus.value = previous.copy(
+            recordingActive = recordingActive,
+            videoFrameAgeMs = videoFrameAgeMs,
+            systemMicrophoneMuted = systemMicrophoneMuted,
+            audio = audio,
+            recentEvents = events,
+        )
+    }
+
+    fun markStopped() {
+        val current = mutableStatus.value
+        update(
+            recordingActive = false,
+            videoFrameAgeMs = current.videoFrameAgeMs,
+            systemMicrophoneMuted = current.systemMicrophoneMuted,
+            audio = current.audio,
+        )
+    }
+
+    fun report(): String {
+        val current = mutableStatus.value
+        return buildString {
+            appendLine("MemoryCapture call diagnostics")
+            appendLine("Device: ${current.manufacturer} ${current.model}")
+            appendLine(
+                "Android SDK: ${current.sdkInt} | targetSdk: ${current.targetSdk}",
+            )
+            appendLine("Recording active: ${current.recordingActive}")
+            appendLine("Communication active: ${current.audio.communicationActive}")
+            appendLine("Audio mode: ${current.audio.mode}")
+            appendLine("Mic present: ${current.audio.microphonePresent}")
+            appendLine("Mic source: ${current.audio.microphoneSourceLabel}")
+            appendLine(
+                "Mic silenced by Android: " +
+                    current.audio.microphoneSilencedBySystem,
+            )
+            appendLine("System mic muted: ${current.systemMicrophoneMuted}")
+            appendLine(
+                "Mic PCM: bytes=${current.audio.microphoneBytesRead}, " +
+                    "nonZero=${current.audio.microphoneHasNonZeroPcm}",
+            )
+            appendLine(
+                "Last non-zero PCM age: " +
+                    (current.audio.lastNonZeroPcmAgeMs?.let { "${it}ms" } ?: "n/a"),
+            )
+            appendLine("Speaker Assist: ${current.audio.speakerAssistApplied}")
+            appendLine("VoIP status: ${current.audio.voipStatus}")
+            appendLine("Audio health: ${current.audio.audioHealth}")
+            appendLine(
+                "Audio heartbeat age: " +
+                    (current.audio.audioHeartbeatAgeMs?.let { "${it}ms" } ?: "n/a"),
+            )
+            appendLine(
+                "Video frame age: " +
+                    (current.videoFrameAgeMs?.let { "${it}ms" } ?: "n/a"),
+            )
+            appendLine("Events:")
+            current.recentEvents.forEach { appendLine("  $it") }
+        }.trimEnd()
+    }
+
+    private const val MAX_EVENTS = 40
+}
+
