@@ -21,8 +21,8 @@ jobs:
         uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools'
-      - name: Install SDK
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install Android 17 preview SDK
+        run: android sdk install --canary platforms/android-37
       - name: Prepare stable debug signing key
         run: |
           mkdir -p "$HOME/.android"
