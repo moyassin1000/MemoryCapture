@@ -55,6 +55,9 @@ data class CallAudioDiagnostics(
     val microphoneBytesRead: Int = 0,
     val microphoneHasNonZeroPcm: Boolean = false,
     val lastNonZeroPcmAgeMs: Long? = null,
+    val microphoneSourceSwitchCount: Int = 0,
+    val systemSilenceFallbackCount: Int = 0,
+    val zeroPcmFallbackCount: Int = 0,
     val speakerAssistApplied: Boolean = false,
     val audioHealth: AudioCaptureHealth = AudioCaptureHealth.NotRequested,
     val voipStatus: VoipCaptureStatus = VoipCaptureStatus.Inactive,
@@ -111,6 +114,15 @@ class AudioCaptureEngine(
 
     @Volatile
     private var diagnosticLastNonZeroPcmElapsedMs = 0L
+
+    @Volatile
+    private var diagnosticMicSourceSwitchCount = 0
+
+    @Volatile
+    private var diagnosticSystemSilenceFallbackCount = 0
+
+    @Volatile
+    private var diagnosticZeroPcmFallbackCount = 0
 
     private val communicationRouteLock = Any()
 
@@ -238,6 +250,9 @@ class AudioCaptureEngine(
             diagnosticMicBytesRead = 0
             diagnosticMicHasNonZeroPcm = false
             diagnosticLastNonZeroPcmElapsedMs = 0L
+            diagnosticMicSourceSwitchCount = 0
+            diagnosticSystemSilenceFallbackCount = 0
+            diagnosticZeroPcmFallbackCount = 0
             lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
             paused = false
             running = true
@@ -455,6 +470,7 @@ class AudioCaptureEngine(
                             lastMicRecoveryAttemptElapsedMs = nowElapsedMs
                             lastMicSourceSwitchElapsedMs = nowElapsedMs
                             lastMicNonZeroElapsedMs = nowElapsedMs
+                            diagnosticSystemSilenceFallbackCount += 1
                             callMicSilencedBySystem = false
                         }
                     }
@@ -592,6 +608,7 @@ class AudioCaptureEngine(
                         lastMicRecoveryAttemptElapsedMs = nowElapsedMs
                         lastMicSourceSwitchElapsedMs = nowElapsedMs
                         lastMicNonZeroElapsedMs = nowElapsedMs
+                        diagnosticZeroPcmFallbackCount += 1
                         callMicSilencedBySystem = false
                     }
                 }
@@ -896,6 +913,9 @@ class AudioCaptureEngine(
             microphoneBytesRead = diagnosticMicBytesRead,
             microphoneHasNonZeroPcm = diagnosticMicHasNonZeroPcm,
             lastNonZeroPcmAgeMs = nonZeroAgeMs,
+            microphoneSourceSwitchCount = diagnosticMicSourceSwitchCount,
+            systemSilenceFallbackCount = diagnosticSystemSilenceFallbackCount,
+            zeroPcmFallbackCount = diagnosticZeroPcmFallbackCount,
             speakerAssistApplied = speakerAssistApplied,
             audioHealth = runtimeHealth,
             voipStatus = voipStatus,
@@ -1093,6 +1113,9 @@ class AudioCaptureEngine(
 
         runCatching { current?.release() }
         microphoneRecord = replacement
+        if (activeMicSource != audioSource) {
+            diagnosticMicSourceSwitchCount += 1
+        }
         activeMicSource = audioSource
         return replacement
     }
@@ -1155,6 +1178,9 @@ class AudioCaptureEngine(
         diagnosticMicBytesRead = 0
         diagnosticMicHasNonZeroPcm = false
         diagnosticLastNonZeroPcmElapsedMs = 0L
+        diagnosticMicSourceSwitchCount = 0
+        diagnosticSystemSilenceFallbackCount = 0
+        diagnosticZeroPcmFallbackCount = 0
         if (runtimeHealth == AudioCaptureHealth.Healthy && failure != null) {
             runtimeHealth = AudioCaptureHealth.AllAudioLost
         }
