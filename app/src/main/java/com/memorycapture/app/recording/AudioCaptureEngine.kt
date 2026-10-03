@@ -45,6 +45,25 @@ enum class VoipCaptureStatus {
     NoMicrophonePath,
 }
 
+data class CallAudioDiagnostics(
+    val mode: AudioMode = AudioMode.None,
+    val communicationActive: Boolean = false,
+    val microphonePresent: Boolean = false,
+    val microphoneSource: Int = MediaRecorder.AudioSource.MIC,
+    val microphoneSourceLabel: String = "MIC",
+    val microphoneSilencedBySystem: Boolean = false,
+    val microphoneBytesRead: Int = 0,
+    val microphoneHasNonZeroPcm: Boolean = false,
+    val lastNonZeroPcmAgeMs: Long? = null,
+    val microphoneSourceSwitchCount: Int = 0,
+    val systemSilenceFallbackCount: Int = 0,
+    val zeroPcmFallbackCount: Int = 0,
+    val speakerAssistApplied: Boolean = false,
+    val audioHealth: AudioCaptureHealth = AudioCaptureHealth.NotRequested,
+    val voipStatus: VoipCaptureStatus = VoipCaptureStatus.Inactive,
+    val audioHeartbeatAgeMs: Long? = null,
+)
+
 @SuppressLint("MissingPermission")
 class AudioCaptureEngine(
     private val context: Context,
@@ -81,7 +100,33 @@ class AudioCaptureEngine(
     @Volatile
     private var activeMicSource = MediaRecorder.AudioSource.MIC
 
+    @Volatile
+    private var activeAudioMode = AudioMode.None
+
+    @Volatile
+    private var diagnosticCommunicationActive = false
+
+    @Volatile
+    private var diagnosticMicBytesRead = 0
+
+    @Volatile
+    private var diagnosticMicHasNonZeroPcm = false
+
+    @Volatile
+    private var diagnosticLastNonZeroPcmElapsedMs = 0L
+
+    @Volatile
+    private var diagnosticMicSourceSwitchCount = 0
+
+    @Volatile
+    private var diagnosticSystemSilenceFallbackCount = 0
+
+    @Volatile
+    private var diagnosticZeroPcmFallbackCount = 0
+
     private val communicationRouteLock = Any()
+
+    @Volatile
     private var speakerAssistApplied = false
     private var legacySpeakerWasOn = false
 
@@ -200,6 +245,14 @@ class AudioCaptureEngine(
             voipAssistEnabled = voipCaptureAssistEnabled
             callMicSilencedBySystem = false
             activeMicSource = MediaRecorder.AudioSource.MIC
+            activeAudioMode = mode
+            diagnosticCommunicationActive = false
+            diagnosticMicBytesRead = 0
+            diagnosticMicHasNonZeroPcm = false
+            diagnosticLastNonZeroPcmElapsedMs = 0L
+            diagnosticMicSourceSwitchCount = 0
+            diagnosticSystemSilenceFallbackCount = 0
+            diagnosticZeroPcmFallbackCount = 0
             lastWorkerHeartbeatElapsedMs = SystemClock.elapsedRealtime()
             paused = false
             running = true
@@ -348,6 +401,7 @@ class AudioCaptureEngine(
 
                 val nowElapsedMs = SystemClock.elapsedRealtime()
                 val communicationActive = isCommunicationActive()
+                diagnosticCommunicationActive = communicationActive
                 val microphoneRequested =
                     mode == AudioMode.Microphone || mode == AudioMode.DeviceAndMic
 
@@ -416,6 +470,7 @@ class AudioCaptureEngine(
                             lastMicRecoveryAttemptElapsedMs = nowElapsedMs
                             lastMicSourceSwitchElapsedMs = nowElapsedMs
                             lastMicNonZeroElapsedMs = nowElapsedMs
+                            diagnosticSystemSilenceFallbackCount += 1
                             callMicSilencedBySystem = false
                         }
                     }
@@ -505,6 +560,12 @@ class AudioCaptureEngine(
                 val micHasNonZeroPcm =
                     micBytes > 0 && hasNonZeroPcm16(micBuffer, micBytes)
 
+                diagnosticMicBytesRead = micBytes
+                diagnosticMicHasNonZeroPcm = micHasNonZeroPcm
+                if (micHasNonZeroPcm) {
+                    diagnosticLastNonZeroPcmElapsedMs = nowElapsedMs
+                }
+
                 if (
                     communicationActive &&
                     microphoneRequested &&
@@ -547,6 +608,7 @@ class AudioCaptureEngine(
                         lastMicRecoveryAttemptElapsedMs = nowElapsedMs
                         lastMicSourceSwitchElapsedMs = nowElapsedMs
                         lastMicNonZeroElapsedMs = nowElapsedMs
+                        diagnosticZeroPcmFallbackCount += 1
                         callMicSilencedBySystem = false
                     }
                 }
@@ -829,6 +891,38 @@ class AudioCaptureEngine(
 
     fun voipCaptureStatus(): VoipCaptureStatus = voipStatus
 
+    fun diagnostics(
+        nowElapsedMs: Long = SystemClock.elapsedRealtime(),
+    ): CallAudioDiagnostics {
+        val heartbeatAgeMs =
+            lastWorkerHeartbeatElapsedMs
+                .takeIf { it > 0L }
+                ?.let { (nowElapsedMs - it).coerceAtLeast(0L) }
+        val nonZeroAgeMs =
+            diagnosticLastNonZeroPcmElapsedMs
+                .takeIf { it > 0L }
+                ?.let { (nowElapsedMs - it).coerceAtLeast(0L) }
+
+        return CallAudioDiagnostics(
+            mode = activeAudioMode,
+            communicationActive = diagnosticCommunicationActive,
+            microphonePresent = microphoneRecord != null,
+            microphoneSource = activeMicSource,
+            microphoneSourceLabel = microphoneSourceLabel(activeMicSource),
+            microphoneSilencedBySystem = callMicSilencedBySystem,
+            microphoneBytesRead = diagnosticMicBytesRead,
+            microphoneHasNonZeroPcm = diagnosticMicHasNonZeroPcm,
+            lastNonZeroPcmAgeMs = nonZeroAgeMs,
+            microphoneSourceSwitchCount = diagnosticMicSourceSwitchCount,
+            systemSilenceFallbackCount = diagnosticSystemSilenceFallbackCount,
+            zeroPcmFallbackCount = diagnosticZeroPcmFallbackCount,
+            speakerAssistApplied = speakerAssistApplied,
+            audioHealth = runtimeHealth,
+            voipStatus = voipStatus,
+            audioHeartbeatAgeMs = heartbeatAgeMs,
+        )
+    }
+
     fun isRunning(): Boolean = running
 
     fun isStalled(
@@ -846,6 +940,14 @@ class AudioCaptureEngine(
         failure = failure ?: IllegalStateException("Audio capture stalled.")
         abort()
     }
+
+    private fun microphoneSourceLabel(source: Int): String =
+        when (source) {
+            MediaRecorder.AudioSource.MIC -> "MIC"
+            MediaRecorder.AudioSource.VOICE_RECOGNITION -> "VOICE_RECOGNITION"
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION -> "VOICE_COMMUNICATION"
+            else -> "SOURCE_$source"
+        }
 
     private fun isCommunicationActive(): Boolean =
         audioManager.mode == AudioManager.MODE_IN_COMMUNICATION ||
@@ -1011,6 +1113,9 @@ class AudioCaptureEngine(
 
         runCatching { current?.release() }
         microphoneRecord = replacement
+        if (activeMicSource != audioSource) {
+            diagnosticMicSourceSwitchCount += 1
+        }
         activeMicSource = audioSource
         return replacement
     }
@@ -1068,6 +1173,14 @@ class AudioCaptureEngine(
         voipStatus = VoipCaptureStatus.Inactive
         callMicSilencedBySystem = false
         activeMicSource = MediaRecorder.AudioSource.MIC
+        activeAudioMode = AudioMode.None
+        diagnosticCommunicationActive = false
+        diagnosticMicBytesRead = 0
+        diagnosticMicHasNonZeroPcm = false
+        diagnosticLastNonZeroPcmElapsedMs = 0L
+        diagnosticMicSourceSwitchCount = 0
+        diagnosticSystemSilenceFallbackCount = 0
+        diagnosticZeroPcmFallbackCount = 0
         if (runtimeHealth == AudioCaptureHealth.Healthy && failure != null) {
             runtimeHealth = AudioCaptureHealth.AllAudioLost
         }

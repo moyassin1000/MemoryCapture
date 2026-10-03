@@ -1,5 +1,7 @@
 package com.memorycapture.app.ui.capture
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
@@ -8,6 +10,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -71,6 +74,8 @@ import com.memorycapture.app.data.preferences.RecordingFrameRate
 import com.memorycapture.app.data.preferences.RecordingQuality
 import com.memorycapture.app.data.preferences.VideoBitratePreset
 import com.memorycapture.app.recording.AudioCaptureHealth
+import com.memorycapture.app.recording.CallDiagnosticsStore
+import com.memorycapture.app.recording.CallRuntimeDiagnostics
 import com.memorycapture.app.recording.CountdownStore
 import com.memorycapture.app.recording.GuardianThermalLevel
 import com.memorycapture.app.recording.RecordingGuardianStore
@@ -168,6 +173,7 @@ fun CaptureScreen(
     }
     val state by RecordingStateStore.state.collectAsStateWithLifecycle()
     val guardianStatus by RecordingGuardianStore.status.collectAsStateWithLifecycle()
+    val callDiagnostics by CallDiagnosticsStore.status.collectAsStateWithLifecycle()
     val countdown by CountdownStore.seconds.collectAsStateWithLifecycle()
     val startedAt by RecordingSessionStore.startedAtElapsedRealtime.collectAsStateWithLifecycle()
     val pausedAt by RecordingSessionStore.pausedAtElapsedRealtime.collectAsStateWithLifecycle()
@@ -354,6 +360,29 @@ fun CaptureScreen(
                                     state is RecordingState.Recording &&
                                         !guardianStatus.cpuProtectionActive
                                     ),
+                        )
+                    }
+                }
+
+                if (callDiagnostics.model.isNotBlank()) {
+                    item {
+                        CallDiagnosticsCard(
+                            diagnostics = callDiagnostics,
+                            onCopy = {
+                                val clipboard =
+                                    context.getSystemService(ClipboardManager::class.java)
+                                clipboard.setPrimaryClip(
+                                    ClipData.newPlainText(
+                                        "MemoryCapture call diagnostics",
+                                        CallDiagnosticsStore.report(),
+                                    ),
+                                )
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.call_diagnostics_copied),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            },
                         )
                     }
                 }
@@ -832,6 +861,117 @@ private fun InstantReplayCard(
                     enabled = enabled,
                     onClick = { onSelect(InstantReplayDuration.Seconds180) },
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CallDiagnosticsCard(
+    diagnostics: CallRuntimeDiagnostics,
+    onCopy: () -> Unit,
+) {
+    val yes = stringResource(R.string.call_diagnostics_yes)
+    val no = stringResource(R.string.call_diagnostics_no)
+    val na = stringResource(R.string.call_diagnostics_na)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(10.dp, MaterialTheme.shapes.large),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.call_diagnostics_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black,
+            )
+            Text(
+                text = stringResource(R.string.call_diagnostics_body),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(
+                    R.string.call_diagnostics_call_active,
+                    if (diagnostics.audio.communicationActive) yes else no,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(
+                    R.string.call_diagnostics_mic_source,
+                    diagnostics.audio.microphoneSourceLabel,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(
+                    R.string.call_diagnostics_android_silence,
+                    if (diagnostics.audio.microphoneSilencedBySystem) yes else no,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(
+                    R.string.call_diagnostics_pcm,
+                    if (diagnostics.audio.microphoneHasNonZeroPcm) {
+                        stringResource(R.string.call_diagnostics_signal)
+                    } else {
+                        stringResource(R.string.call_diagnostics_zero)
+                    },
+                    diagnostics.audio.microphoneBytesRead,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(
+                    R.string.call_diagnostics_fallbacks,
+                    diagnostics.audio.microphoneSourceSwitchCount,
+                    diagnostics.audio.systemSilenceFallbackCount,
+                    diagnostics.audio.zeroPcmFallbackCount,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(
+                    R.string.call_diagnostics_speaker,
+                    if (diagnostics.audio.speakerAssistApplied) yes else no,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(
+                    R.string.call_diagnostics_audio_health,
+                    diagnostics.audio.audioHealth.name,
+                    diagnostics.audio.voipStatus.name,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(
+                    R.string.call_diagnostics_video_age,
+                    diagnostics.videoFrameAgeMs?.toString() ?: na,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+
+            diagnostics.recentEvents.takeLast(5).forEach { event ->
+                Text(
+                    text = event,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            OutlinedButton(onClick = onCopy) {
+                Text(stringResource(R.string.call_diagnostics_copy))
             }
         }
     }
