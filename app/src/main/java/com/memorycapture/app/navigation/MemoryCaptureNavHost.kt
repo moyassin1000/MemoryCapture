@@ -5,9 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -36,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -98,32 +101,16 @@ fun MemoryCaptureNavHost(
                 PremiumDock(
                     currentRoute = currentRoute,
                     onHome = {
-                        navController.navigate(AppDestination.Home.route) {
-                            popUpTo(AppDestination.Home.route) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navController.navigateToDock(AppDestination.Home.route)
                     },
                     onRecordings = {
-                        navController.navigate(AppDestination.Recordings.route) {
-                            popUpTo(AppDestination.Home.route) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navController.navigateToDock(AppDestination.Recordings.route)
                     },
                     onCapture = {
-                        navController.navigate(AppDestination.Capture.route) {
-                            popUpTo(AppDestination.Home.route) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navController.navigateToDock(AppDestination.Capture.route)
                     },
                     onSettings = {
-                        navController.navigate(AppDestination.Settings.route) {
-                            popUpTo(AppDestination.Home.route) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navController.navigateToDock(AppDestination.Settings.route)
                     },
                 )
             }
@@ -161,9 +148,15 @@ fun MemoryCaptureNavHost(
                 HomeScreen(
                     onStartRecording = onRequestRecording,
                     onStopRecording = onStopRecording,
-                    onOpenCapture = { navController.navigate(AppDestination.Capture.route) },
-                    onOpenRecordings = { navController.navigate(AppDestination.Recordings.route) },
-                    onOpenSettings = { navController.navigate(AppDestination.Settings.route) },
+                    onOpenCapture = {
+                        navController.navigateToDock(AppDestination.Capture.route)
+                    },
+                    onOpenRecordings = {
+                        navController.navigateToDock(AppDestination.Recordings.route)
+                    },
+                    onOpenSettings = {
+                        navController.navigateToDock(AppDestination.Settings.route)
+                    },
                     onOpenPro = { navController.navigate(AppDestination.Pro.route) },
                 )
             }
@@ -188,7 +181,7 @@ fun MemoryCaptureNavHost(
                         )
                     },
                     onGoToCapture = {
-                        navController.navigate(AppDestination.Capture.route)
+                        navController.navigateToDock(AppDestination.Capture.route)
                     },
                 )
             }
@@ -306,12 +299,14 @@ private fun PremiumDock(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             DockItem(
+                modifier = Modifier.weight(1f),
                 icon = Icons.Default.Home,
                 label = stringResource(R.string.home_tab),
                 selected = currentRoute == AppDestination.Home.route,
                 onClick = onHome,
             )
             DockItem(
+                modifier = Modifier.weight(1f),
                 icon = Icons.Default.VideoLibrary,
                 label = stringResource(R.string.recordings_tab),
                 selected = currentRoute == AppDestination.Recordings.route,
@@ -319,30 +314,59 @@ private fun PremiumDock(
             )
 
             Box(
-                modifier = Modifier
-                    .size(66.dp)
-                    .shadow(18.dp, CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.tertiary,
-                            ),
-                        ),
-                        CircleShape,
-                    )
-                    .clickable(onClick = onCapture),
+                modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = Icons.Default.VideoCameraBack,
-                    contentDescription = stringResource(R.string.capture_tab),
-                    modifier = Modifier.size(30.dp),
-                    tint = Color.White,
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(58.dp)
+                            .shadow(18.dp, CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        MaterialTheme.colorScheme.primary,
+                                        MaterialTheme.colorScheme.tertiary,
+                                    ),
+                                ),
+                                CircleShape,
+                            )
+                            .clickable(onClick = onCapture),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VideoCameraBack,
+                            contentDescription = stringResource(R.string.capture_tab),
+                            modifier = Modifier.size(28.dp),
+                            tint = Color.White,
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.capture_tab),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (
+                            currentRoute == AppDestination.Capture.route
+                        ) {
+                            FontWeight.Black
+                        } else {
+                            FontWeight.Medium
+                        },
+                        color = if (
+                            currentRoute == AppDestination.Capture.route
+                        ) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
             }
 
             DockItem(
+                modifier = Modifier.weight(1f),
                 icon = Icons.Default.Settings,
                 label = stringResource(R.string.settings),
                 selected = currentRoute == AppDestination.Settings.route,
@@ -354,13 +378,15 @@ private fun PremiumDock(
 
 @Composable
 private fun DockItem(
+    modifier: Modifier = Modifier,
     icon: ImageVector,
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
+    Column(
+        modifier = modifier
+            .padding(horizontal = 3.dp)
             .background(
                 if (selected) {
                     MaterialTheme.colorScheme.primaryContainer
@@ -370,9 +396,9 @@ private fun DockItem(
                 RoundedCornerShape(20.dp),
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = if (selected) 12.dp else 10.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
+            .padding(horizontal = 6.dp, vertical = 9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(
             imageVector = icon,
@@ -383,13 +409,39 @@ private fun DockItem(
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
         )
-        if (selected) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-            )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.Black else FontWeight.Medium,
+            color = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+    }
+}
+
+private fun NavHostController.navigateToDock(route: String) {
+    if (currentDestination?.route == route) return
+
+    if (route == AppDestination.Home.route) {
+        val returnedHome = popBackStack(
+            route = AppDestination.Home.route,
+            inclusive = false,
+        )
+        if (!returnedHome && currentDestination?.route != AppDestination.Home.route) {
+            navigate(AppDestination.Home.route) {
+                launchSingleTop = true
+            }
         }
+        return
+    }
+
+    navigate(route) {
+        popUpTo(AppDestination.Home.route) {
+            inclusive = false
+        }
+        launchSingleTop = true
     }
 }
