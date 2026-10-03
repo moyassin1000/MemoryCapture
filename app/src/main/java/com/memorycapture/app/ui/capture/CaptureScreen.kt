@@ -932,6 +932,15 @@ private fun CallDiagnosticsCard(
             )
             Text(
                 text = stringResource(
+                    R.string.call_diagnostics_fallbacks,
+                    diagnostics.audio.microphoneSourceSwitchCount,
+                    diagnostics.audio.systemSilenceFallbackCount,
+                    diagnostics.audio.zeroPcmFallbackCount,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(
                     R.string.call_diagnostics_speaker,
                     if (diagnostics.audio.speakerAssistApplied) yes else no,
                 ),
