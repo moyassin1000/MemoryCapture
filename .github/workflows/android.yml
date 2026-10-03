@@ -22,7 +22,7 @@ jobs:
         with:
           packages: 'platform-tools'
       - name: Install Android 17 preview SDK
-        run: sdkmanager --channel=3 "platforms;android-37"
+        run: android sdk install --canary platforms/android-37
       - name: Prepare stable debug signing key
         run: |
           mkdir -p "$HOME/.android"
