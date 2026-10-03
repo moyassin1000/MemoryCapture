@@ -227,6 +227,24 @@ object CallDiagnosticsStore {
         if (previous.audio.audioHealth != audio.audioHealth) {
             addEvent("audioHealth=${audio.audioHealth}")
         }
+        if (
+            previous.audio.microphoneSourceSwitchCount !=
+            audio.microphoneSourceSwitchCount
+        ) {
+            addEvent("sourceSwitches=${audio.microphoneSourceSwitchCount}")
+        }
+        if (
+            previous.audio.systemSilenceFallbackCount !=
+            audio.systemSilenceFallbackCount
+        ) {
+            addEvent("systemSilenceFallbacks=${audio.systemSilenceFallbackCount}")
+        }
+        if (
+            previous.audio.zeroPcmFallbackCount !=
+            audio.zeroPcmFallbackCount
+        ) {
+            addEvent("zeroPcmFallbacks=${audio.zeroPcmFallbackCount}")
+        }
         if (previous.systemMicrophoneMuted != systemMicrophoneMuted) {
             addEvent("systemMicMuted=$systemMicrophoneMuted")
         }
@@ -275,6 +293,11 @@ object CallDiagnosticsStore {
             appendLine(
                 "Last non-zero PCM age: " +
                     (current.audio.lastNonZeroPcmAgeMs?.let { "${it}ms" } ?: "n/a"),
+            )
+            appendLine(
+                "Fallback counters: switches=${current.audio.microphoneSourceSwitchCount}, " +
+                    "systemSilence=${current.audio.systemSilenceFallbackCount}, " +
+                    "zeroPcm=${current.audio.zeroPcmFallbackCount}",
             )
             appendLine("Speaker Assist: ${current.audio.speakerAssistApplied}")
             appendLine("VoIP status: ${current.audio.voipStatus}")
